@@ -12,6 +12,7 @@ By contrast, ticking a checkbox in **Reading View** or in a **Dataview `TASK` qu
 
 - **Auto-sink on check:** tap/click a checkbox and the completed line drops to the bottom of its list.
 - **Returns to its slot on uncheck:** unchecked items are kept in alphabetical order, so unchecking an item snaps it back to where it was.
+- **Store sections:** the command *Organize shopping list by store section* groups items under `## Produce / Dairy / Meat-Protein / Bakery / Pantry-Dry / Spices / Frozen / Canned / Other`, and a flat note named **Shopping List** is auto-grouped when opened. Checking sinks within each section.
 - **Command:** `Sink completed tasks to bottom (current note)` — bulk-sort every flat checklist in the active note (handy as a manual fallback or to add to the mobile toolbar).
 
 ## Safety

@@ -68,6 +68,79 @@ function arraysEqual(a, b) {
   return true;
 }
 
+// --- Store sections -----------------------------------------------------------
+const SECTIONS = ['Produce', 'Dairy', 'Meat/Protein', 'Bakery', 'Pantry/Dry', 'Spices', 'Frozen', 'Canned', 'Other'];
+
+// Checked in priority order; first matching section wins. "Canned"/"Frozen" first so
+// they trump base ingredients (e.g. "canned tomato" -> Canned, not Produce).
+const SECTION_RULES = [
+  ['Frozen', ['frozen']],
+  ['Canned', ['can ', ' can', 'canned', 'adobo', 'diced tomato', 'pinto bean', 'kidney bean', 'chickpea', 'garbanzo']],
+  ['Dairy', ['paneer', 'butter', 'cream', 'milk', 'yogurt', 'yoghurt', 'curd', 'cheese', 'ghee']],
+  ['Bakery', ['bread', 'bun', 'naan', 'pav', 'toast', 'tortilla', 'roti', 'pita']],
+  ['Spices', ['masala', 'cumin', 'coriander', 'turmeric', 'cardamom', 'peppercorn', 'bay leaf', 'oregano', 'cayenne', 'chaat', 'kasoori', 'taco seasoning', 'spice', 'methi', 'asafoetida', 'paprika', 'cinnamon', 'anise', 'clove', 'nutmeg', 'fenugreek']],
+  ['Produce', ['onion', 'tomato', 'cilantro', 'ginger', 'garlic', 'serrano', 'scallion', 'bell pepper', 'chili', 'chilli', 'corn', 'potato', 'lemon', 'lime', 'spinach', 'mint', 'curry leaf', 'cucumber', 'carrot', 'apple', 'mango', 'banana', 'herb', 'pepper']],
+  ['Meat/Protein', ['chicken', 'beef', 'egg', 'fish', 'tofu', 'mutton', 'lamb', 'shrimp']],
+  ['Pantry/Dry', ['rice', 'flour', 'sooji', 'semolina', 'lentil', 'dal', 'sugar', 'oil', 'vinegar', 'pasta', 'broth', 'paste', 'bean', 'salt', 'baking', 'soda', 'tea', 'water']]
+];
+
+function classify(line) {
+  const t = itemText(line);
+  for (let i = 0; i < SECTION_RULES.length; i++) {
+    const kws = SECTION_RULES[i][1];
+    for (let k = 0; k < kws.length; k++) {
+      if (t.indexOf(kws[k]) !== -1) return SECTION_RULES[i][0];
+    }
+  }
+  return 'Other';
+}
+
+function isManagedHeading(line) {
+  if (line.slice(0, 3) !== '## ') return false;
+  return SECTIONS.indexOf(line.slice(3).trim()) !== -1;
+}
+
+// Group all task lines under store-section headings, alpha within section,
+// completed sunk to the bottom of their section. Returns the new managed text.
+function buildSections(taskLines) {
+  const groups = {};
+  for (let i = 0; i < taskLines.length; i++) {
+    const sec = classify(taskLines[i]);
+    (groups[sec] || (groups[sec] = [])).push(taskLines[i]);
+  }
+  const out = [];
+  for (let s = 0; s < SECTIONS.length; s++) {
+    const sec = SECTIONS[s];
+    if (!groups[sec] || !groups[sec].length) continue;
+    if (out.length) out.push('');
+    out.push('## ' + sec);
+    const ordered = reorderBlock(groups[sec]);
+    for (let j = 0; j < ordered.length; j++) out.push(ordered[j]);
+  }
+  return out;
+}
+
+// Organize the contiguous managed region (task lines + our section headings) of a
+// note into store sections via one granular editor transaction. Returns true if changed.
+function organizeBySections(editor) {
+  const n = editor.lineCount();
+  let first = -1, last = -1;
+  for (let i = 0; i < n; i++) {
+    const l = editor.getLine(i);
+    if (isTaskLine(l) || isManagedHeading(l)) { if (first < 0) first = i; last = i; }
+  }
+  if (first < 0) return false;
+  const tasks = [];
+  for (let i = first; i <= last; i++) { if (isTaskLine(editor.getLine(i))) tasks.push(editor.getLine(i)); }
+  if (tasks.some(isIndented)) return false;
+  const oldText = [];
+  for (let i = first; i <= last; i++) oldText.push(editor.getLine(i));
+  const newLines = buildSections(tasks);
+  if (arraysEqual(oldText, newLines)) return false;
+  editor.replaceRange(newLines.join('\n'), { line: first, ch: 0 }, { line: last, ch: editor.getLine(last).length });
+  return true;
+}
+
 // Find the contiguous run of task lines that contains `line`. Returns {start, end} or null.
 function findBlock(getLine, lineCount, line) {
   if (line < 0 || line >= lineCount) return null;
@@ -142,6 +215,32 @@ class SinkCompletedTasksPlugin extends PluginBase {
       name: 'Sink completed tasks to bottom (current note)',
       editorCallback: function (editor) { sinkAllBlocks(editor); }
     });
+
+    this.addCommand({
+      id: 'organize-shopping-list-by-section',
+      name: 'Organize shopping list by store section',
+      editorCallback: function (editor) { organizeBySections(editor); }
+    });
+
+    // After Meal Plan dumps a flat list, auto-group it into sections when you open it.
+    this.registerEvent(this.app.workspace.on('active-leaf-change', this.maybeAutoOrganize.bind(this)));
+  }
+
+  maybeAutoOrganize() {
+    const self = this;
+    setTimeout(function () {
+      const view = self.app.workspace.getActiveViewOfType(obsidian.MarkdownView);
+      if (!view || !view.file) return;
+      if (view.file.basename.toLowerCase() !== 'shopping list') return;
+      const editor = view.editor;
+      let hasTask = false, hasHeading = false, n = editor.lineCount();
+      for (let i = 0; i < n; i++) {
+        const l = editor.getLine(i);
+        if (isTaskLine(l)) hasTask = true;
+        if (isManagedHeading(l)) hasHeading = true;
+      }
+      if (hasTask && !hasHeading) { try { organizeBySections(editor); } catch (e) {} }
+    }, 50);
   }
 
   handleCheckboxClick(evt) {
@@ -191,6 +290,10 @@ module.exports._internal = {
   isIndented: isIndented,
   itemText: itemText,
   reorderBlock: reorderBlock,
+  classify: classify,
+  isManagedHeading: isManagedHeading,
+  buildSections: buildSections,
+  organizeBySections: organizeBySections,
   arraysEqual: arraysEqual,
   findBlock: findBlock,
   findAllBlocks: findAllBlocks,

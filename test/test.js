@@ -96,7 +96,34 @@ test('unchecked items kept alphabetical; completed sink', function () {
   assert.strictEqual(ed2.getText(), '- [ ] apple\n- [ ] cherry\n- [ ] mango');
 });
 
-// 8. findBlock detects contiguous run boundaries
+// 8. classify maps ingredients to store sections
+test('classify maps ingredients to sections', function () {
+  assert.strictEqual(I.classify('- [ ] paneer 200 g'), 'Dairy');
+  assert.strictEqual(I.classify('- [ ] heavy cream 0.75 cup'), 'Dairy');
+  assert.strictEqual(I.classify('- [ ] finely chopped onion 2.5 cups'), 'Produce');
+  assert.strictEqual(I.classify('- [ ] garam masala 1.5 tbsp'), 'Spices');
+  assert.strictEqual(I.classify('- [x] can pinto bean 14.5 oz'), 'Canned');
+  assert.strictEqual(I.classify('- [ ] sooji 1 cup'), 'Pantry/Dry');
+  assert.strictEqual(I.classify('- [ ] bread 8 slices'), 'Bakery');
+  assert.strictEqual(I.classify('- [ ] zorblax 1'), 'Other');
+});
+
+// 9. organizeBySections groups flat list under headings, sinks completed per section
+test('organizeBySections groups + sinks per section', function () {
+  const ed = makeEditor('- [ ] tomato 2\n- [ ] butter 8 tbsp\n- [x] paneer 200 g\n- [ ] onion 1');
+  const changed = I.organizeBySections(ed);
+  assert.strictEqual(changed, true);
+  assert.strictEqual(ed.getText(),
+    '## Produce\n- [ ] onion 1\n- [ ] tomato 2\n\n## Dairy\n- [ ] butter 8 tbsp\n- [x] paneer 200 g');
+});
+
+// 9b. organize is idempotent
+test('organizeBySections is idempotent', function () {
+  const ed = makeEditor('## Produce\n- [ ] onion 1\n- [ ] tomato 2\n\n## Dairy\n- [ ] butter 8 tbsp\n- [x] paneer 200 g');
+  assert.strictEqual(I.organizeBySections(ed), false);
+});
+
+// 10. findBlock detects contiguous run boundaries
 test('findBlock returns contiguous run', function () {
   const lines = ['intro', '- [ ] a', '- [x] b', '- [ ] c', 'outro'];
   const blk = I.findBlock(function (i) { return lines[i]; }, lines.length, 2);
