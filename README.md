@@ -11,7 +11,7 @@ By contrast, ticking a checkbox in **Reading View** or in a **Dataview `TASK` qu
 ## What it does
 
 - **Auto-sink on check:** tap/click a checkbox and the completed line drops to the bottom of its list.
-- **Stable order:** unchecked items keep their order at the top; checked items keep their order at the bottom.
+- **Returns to its slot on uncheck:** unchecked items are kept in alphabetical order, so unchecking an item snaps it back to where it was.
 - **Command:** `Sink completed tasks to bottom (current note)` — bulk-sort every flat checklist in the active note (handy as a manual fallback or to add to the mobile toolbar).
 
 ## Safety

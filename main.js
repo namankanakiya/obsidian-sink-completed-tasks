@@ -5,6 +5,8 @@
  * --------------------
  * When you check a flat checklist item, this plugin moves the completed line to
  * the bottom of its list so the top of the list is always your "what's left".
+ * Unchecked items are kept in canonical alphabetical order, so unchecking an item
+ * returns it to the same slot it came from.
  *
  * Crucially, it does this with a *granular editor transaction* (editor.replaceRange),
  * NOT a whole-file write (vault.modify). That keeps it compatible with CRDT live-sync
@@ -39,7 +41,13 @@ function isIndented(line) {
   return !!m && m[1].length > 0;
 }
 
-// Stable partition: incomplete tasks first (original order), then completed (original order).
+function itemText(line) {
+  return line.replace(TASK_RE, '').trim().toLowerCase();
+}
+
+// Incomplete tasks first, sorted by their canonical (alphabetical) text so an item
+// always returns to the same slot when unchecked; completed tasks sink to the bottom
+// in the order they were checked.
 function reorderBlock(lines) {
   const incomplete = [];
   const complete = [];
@@ -47,6 +55,10 @@ function reorderBlock(lines) {
     if (isCompleted(lines[i])) complete.push(lines[i]);
     else incomplete.push(lines[i]);
   }
+  incomplete.sort(function (a, b) {
+    const ta = itemText(a), tb = itemText(b);
+    return ta < tb ? -1 : ta > tb ? 1 : 0;
+  });
   return incomplete.concat(complete);
 }
 
@@ -177,6 +189,7 @@ module.exports._internal = {
   isTaskLine: isTaskLine,
   isCompleted: isCompleted,
   isIndented: isIndented,
+  itemText: itemText,
   reorderBlock: reorderBlock,
   arraysEqual: arraysEqual,
   findBlock: findBlock,

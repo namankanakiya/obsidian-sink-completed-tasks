@@ -85,6 +85,17 @@ test('uppercase [X] and other bullet markers handled', function () {
   assert.strictEqual(I.isTaskLine('* [X] thing'), true);
 });
 
+// 7b. Unchecked items are alphabetised so unchecking returns an item to its slot
+test('unchecked items kept alphabetical; completed sink', function () {
+  const ed = makeEditor('- [ ] mango\n- [ ] apple\n- [x] cherry');
+  I.sinkAllBlocks(ed);
+  assert.strictEqual(ed.getText(), '- [ ] apple\n- [ ] mango\n- [x] cherry');
+  // Uncheck cherry -> it returns to its alphabetical slot (between apple and mango)
+  const ed2 = makeEditor('- [ ] apple\n- [ ] mango\n- [ ] cherry');
+  I.sinkAllBlocks(ed2);
+  assert.strictEqual(ed2.getText(), '- [ ] apple\n- [ ] cherry\n- [ ] mango');
+});
+
 // 8. findBlock detects contiguous run boundaries
 test('findBlock returns contiguous run', function () {
   const lines = ['intro', '- [ ] a', '- [x] b', '- [ ] c', 'outro'];
