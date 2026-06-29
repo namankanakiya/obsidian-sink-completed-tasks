@@ -744,7 +744,7 @@ var SinkCompletedTasksPlugin = class extends obsidian.Plugin {
     }
     const leaf = this.app.workspace.getLeaf(false);
     await leaf.openFile(file);
-    await new Promise((r) => setTimeout(r, 60));
+    await new Promise((r) => setTimeout(r, 200));
     const view = leaf.view instanceof obsidian.MarkdownView ? leaf.view : this.app.workspace.getActiveViewOfType(obsidian.MarkdownView);
     if (!view || !view.editor) {
       new obsidian.Notice("Could not open Shopping List editor.");
@@ -754,7 +754,7 @@ var SinkCompletedTasksPlugin = class extends obsidian.Plugin {
     const existing = [];
     for (let i = 0, n = e.lineCount(); i < n; i++) if (isTaskLine(e.getLine(i))) existing.push(e.getLine(i));
     this.replaceTaskRegion(e, mergeShoppingItems(existing, additions));
-    organizeBySections(e, this.pantry);
+    this.pruneAndOrganize(e);
     new obsidian.Notice("Added " + additions.length + " ingredients (x" + factor + ").");
   }
   handleCheckboxClick(evt) {

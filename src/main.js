@@ -166,13 +166,13 @@ class SinkCompletedTasksPlugin extends obsidian.Plugin {
     if (!file) { new obsidian.Notice('No "Shopping List" note found.'); return; }
     const leaf = this.app.workspace.getLeaf(false);
     await leaf.openFile(file);
-    await new Promise((r) => setTimeout(r, 60));
+    await new Promise((r) => setTimeout(r, 200));
     const view = leaf.view instanceof obsidian.MarkdownView ? leaf.view : this.app.workspace.getActiveViewOfType(obsidian.MarkdownView);
     if (!view || !view.editor) { new obsidian.Notice('Could not open Shopping List editor.'); return; }
     const e = view.editor; const existing = [];
     for (let i = 0, n = e.lineCount(); i < n; i++) if (isTaskLine(e.getLine(i))) existing.push(e.getLine(i));
     this.replaceTaskRegion(e, mergeShoppingItems(existing, additions));
-    organizeBySections(e, this.pantry);
+    this.pruneAndOrganize(e); // recombine all blocks + sections, dedupe, sink pantry
     new obsidian.Notice('Added ' + additions.length + ' ingredients (x' + factor + ').');
   }
 
