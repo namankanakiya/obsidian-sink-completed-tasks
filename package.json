@@ -1,0 +1,13 @@
+{
+  "name": "obsidian-sink-completed-tasks",
+  "version": "1.2.0",
+  "description": "Sink completed checklist items, store-section grouping, and scaled recipe add for Obsidian (Relay-safe).",
+  "main": "main.js",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "test": "node --test test/"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.5"
+  }
+}

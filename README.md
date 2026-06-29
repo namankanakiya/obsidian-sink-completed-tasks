@@ -13,6 +13,16 @@ By contrast, ticking a checkbox in **Reading View** or in a **Dataview `TASK` qu
 - **Auto-sink on check:** tap/click a checkbox and the completed line drops to the bottom of its list.
 - **Returns to its slot on uncheck:** unchecked items are kept in alphabetical order, so unchecking an item snaps it back to where it was.
 - **Store sections:** the command *Organize shopping list by store section* groups items under `## Produce / Dairy / Meat-Protein / Bakery / Pantry-Dry / Spices / Frozen / Canned / Other`, and a flat note named **Shopping List** is auto-grouped when opened. Checking sinks within each section.
+- **Add a recipe (scaled):** on a recipe note, run *Add this recipe to Shopping List (scaled)*, pick a multiplier (x0.5–x4 or custom), and its ingredients are scaled, merged (same unit+name sums), and filed into sections.
+
+## Code layout
+
+- `src/tasks.js` — checklist primitives (parse, sink, reorder)
+- `src/ingredient-db.js` — editable section keyword database
+- `src/sections.js` — normalize + fuzzy classify + grouping
+- `src/recipe.js` — ingredient parse / scale / merge
+- `src/main.js` — plugin glue + scale modal
+- bundled to `main.js` via `npm run build` (esbuild); tests: `npm test`
 - **Command:** `Sink completed tasks to bottom (current note)` — bulk-sort every flat checklist in the active note (handy as a manual fallback or to add to the mobile toolbar).
 
 ## Safety
