@@ -99,9 +99,10 @@ var require_ingredient_db = __commonJS({
       "Pantry/Dry": ["rice", "flour", "maida", "sooji", "semolina", "besan", "cornstarch", "cornflour", "lentil", "dal", "sugar", "jaggery", "honey", "syrup", "oil", "vinegar", "pasta", "noodle", "spaghetti", "macaroni", "broth", "stock", "salt", "tea", "coffee", "quinoa", "oat", "cereal", "peanut", "peanutbutter", "almond", "cashew", "walnut", "raisin", "nut", "breadcrumb", "cocoa", "chocolate", "vanilla", "cornmeal", "tamarind", "soysauce", "ketchup", "mustard", "mayo", "mayonnaise", "water"],
       Spices: ["cumin", "coriander", "turmeric", "garam", "masala", "cardamom", "peppercorn", "clove", "cinnamon", "anise", "nutmeg", "mace", "saffron", "paprika", "cayenne", "chaat", "asafoetida", "hing", "fenugreek", "methi", "oregano", "sesame", "spice", "seasoning", "allspice"]
     };
-    var STOP = "chopped diced minced grated finely fresh small large medium ground powder powdered seed seeds dried optional garnish garnishes ripe peeled sliced cubed whole boneless skinless raw cooked extra virgin toasted roasted can cans piece bark leaf leaves or and to taste of a the".split(" ");
+    var STOP = "chopped diced minced grated finely fresh small large medium ground powder powdered seed seeds dried optional garnish garnishes ripe peeled sliced cubed whole boneless skinless raw cooked extra virgin toasted roasted can cans or and to taste of a the".split(" ");
     var UNITS = "cup cups tbsp tsp tablespoon tablespoons teaspoon teaspoons oz ounce ounces lb lbs pound pounds g kg gram grams ml l liter litre pinch clove cloves bunch handful inch".split(" ");
-    module2.exports = { SECTIONS, PHRASE_RULES, TOKEN_DB, STOP, UNITS };
+    var STAPLES = ["salt", "water", "oil", "sugar", "black pepper", "pepper"];
+    module2.exports = { SECTIONS, PHRASE_RULES, TOKEN_DB, STOP, UNITS, STAPLES };
   }
 });
 
@@ -145,7 +146,8 @@ var require_sections = __commonJS({
       const toks = [];
       t.split(" ").forEach((w) => {
         if (!w || STOP_SET[w] || UNIT_SET[w]) return;
-        if (w.length > 4 && w.charAt(w.length - 1) === "s") w = w.slice(0, -1);
+        if (w.length > 4 && w.slice(-3) === "ves") w = w.slice(0, -3) + "f";
+        else if (w.length > 4 && w.charAt(w.length - 1) === "s") w = w.slice(0, -1);
         toks.push(w);
       });
       return toks;
@@ -170,25 +172,28 @@ var require_sections = __commonJS({
       return "Other";
     }
     function isManagedHeading2(line) {
-      return line.slice(0, 3) === "## " && SECTIONS.indexOf(line.slice(3).trim()) !== -1;
+      return line.slice(0, 3) === "## " && (SECTIONS.indexOf(line.slice(3).trim()) !== -1 || line.slice(3).trim() === PANTRY_SECTION);
     }
-    function buildSections(taskLines) {
+    var PANTRY_SECTION = "\u2713 Have (pantry)";
+    function buildSections(taskLines, pantry) {
       const groups = {};
       taskLines.forEach((l) => {
-        const sec = classify(l);
+        const key = normalizeName(l.replace(/^\s*[-*+]\s*\[.\]\s*/, "").split(",")[0]).join(" ");
+        const sec = pantry && pantry.has && pantry.has(key) ? PANTRY_SECTION : classify(l);
         (groups[sec] || (groups[sec] = [])).push(l);
       });
       const out = [];
-      for (let s = 0; s < SECTIONS.length; s++) {
-        const g = groups[SECTIONS[s]];
+      const order = SECTIONS.concat([PANTRY_SECTION]);
+      for (let s = 0; s < order.length; s++) {
+        const g = groups[order[s]];
         if (!g || !g.length) continue;
         if (out.length) out.push("");
-        out.push("## " + SECTIONS[s]);
+        out.push("## " + order[s]);
         reorderBlock(g).forEach((x) => out.push(x));
       }
       return out;
     }
-    function organizeBySections2(editor) {
+    function organizeBySections2(editor, pantry) {
       const n = editor.lineCount();
       let first = -1, last = -1;
       for (let i = 0; i < n; i++) {
@@ -206,12 +211,12 @@ var require_sections = __commonJS({
         if (isTaskLine2(l)) tasks.push(l);
       }
       if (tasks.some(isIndented)) return false;
-      const newLines = buildSections(tasks);
+      const newLines = buildSections(tasks, pantry);
       if (arraysEqual(oldText, newLines)) return false;
       editor.replaceRange(newLines.join("\n"), { line: first, ch: 0 }, { line: last, ch: editor.getLine(last).length });
       return true;
     }
-    module2.exports = { SECTIONS, lev1, normalizeName, classify, isManagedHeading: isManagedHeading2, buildSections, organizeBySections: organizeBySections2 };
+    module2.exports = { SECTIONS, PANTRY_SECTION, lev1, normalizeName, classify, isManagedHeading: isManagedHeading2, buildSections, organizeBySections: organizeBySections2 };
   }
 });
 
@@ -221,10 +226,14 @@ var require_recipe = __commonJS({
     "use strict";
     var { TASK_RE, isTaskLine: isTaskLine2, isCompleted } = require_tasks();
     var { normalizeName } = require_sections();
-    var { UNITS } = require_ingredient_db();
+    var { UNITS, STAPLES } = require_ingredient_db();
     var UNIT_SET = {};
     UNITS.forEach((w) => {
       UNIT_SET[w] = 1;
+    });
+    var STAPLE_SET = {};
+    STAPLES.forEach((w) => {
+      STAPLE_SET[normalizeName(w).join(" ")] = 1;
     });
     function fracToNum(s) {
       return s.indexOf("/") !== -1 ? parseFloat(s.split("/")[0]) / parseFloat(s.split("/")[1]) : parseFloat(s);
@@ -234,21 +243,27 @@ var require_recipe = __commonJS({
       const r = Math.round(n * 100) / 100;
       return r % 1 === 0 ? String(r) : String(r);
     }
-    function parseIngredient(line) {
-      let s = line.replace(/^\s*[-*+]\s+\[.\]\s*/, "").replace(/^\s*[-*+]\s+/, "").trim();
-      let qty = "";
-      const qm = s.match(/^(\d+(?:\.\d+)?(?:\/\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*/);
-      if (qm) {
-        qty = qm[1].replace(/\s+/g, "");
-        s = s.slice(qm[0].length);
+    function nameKey2(name) {
+      return normalizeName(name).join(" ");
+    }
+    function isStaple2(name, pantry) {
+      const k = nameKey2(name);
+      if (!k) return false;
+      if (pantry && pantry.has && pantry.has(k)) return true;
+      return !!STAPLE_SET[k] || k.split(" ").some((t) => STAPLE_SET[t]);
+    }
+    function parseIngredient2(line) {
+      let s = line.replace(/^\s*[-*+]\s+\[.\]\s*/, "").replace(/^\s*[-*+]\s+/, "").split(",")[0].trim().toLowerCase().replace(/½/g, "1/2").replace(/⅓/g, "1/3").replace(/⅔/g, "2/3").replace(/¼/g, "1/4").replace(/¾/g, "3/4").replace(/⅛/g, "1/8");
+      const m = s.match(/(\d+(?:\.\d+)?(?:\/\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*([a-z]+)?/);
+      let qty = "", unit = "";
+      if (m) {
+        qty = m[1].replace(/\s+/g, "");
+        if (m[2] && UNIT_SET[m[2]]) {
+          unit = m[2];
+          s = s.slice(0, m.index) + s.slice(m.index + m[0].length);
+        } else s = s.slice(0, m.index) + s.slice(m.index + m[1].length);
       }
-      let unit = "";
-      const um = s.match(/^([a-zA-Z]+)\b/);
-      if (um && UNIT_SET[um[1].toLowerCase()]) {
-        unit = um[1].toLowerCase();
-        s = s.slice(um[0].length).trim();
-      }
-      return { qty, unit, name: s.split(",")[0].trim() };
+      return { qty, unit, name: normalizeName(s).join(" ") };
     }
     function scaleQty(qty, factor) {
       if (!qty) return "";
@@ -259,9 +274,9 @@ var require_recipe = __commonJS({
       return fmtNum(fracToNum(qty) * factor);
     }
     function ingredientToTask(ing) {
-      return "- [ ] " + [ing.qty, ing.unit, ing.name].filter(Boolean).join(" ").trim();
+      return "- [ ] " + [ing.name, ing.qty, ing.unit].filter(Boolean).join(" ").trim();
     }
-    function recipeIngredients2(text, factor) {
+    function recipeIngredients2(text, factor, pantry) {
       const lines = text.split(/\r?\n/);
       let inSec = false;
       const out = [];
@@ -273,45 +288,213 @@ var require_recipe = __commonJS({
         }
         if (inSec && /^#\s+/.test(l)) break;
         if (!inSec || !/^\s*[-*+]\s+/.test(l)) continue;
-        const ing = parseIngredient(l);
+        const ing = parseIngredient2(l);
         if (!ing.name) continue;
         ing.qty = scaleQty(ing.qty, factor);
         out.push(ingredientToTask(ing));
       }
       return out;
     }
+    var VOL = { tsp: 1, teaspoon: 1, teaspoons: 1, tbsp: 3, tablespoon: 3, tablespoons: 3, cup: 48, cups: 48 };
+    var WT = { g: 1, gram: 1, grams: 1, kg: 1e3, oz: 28.35, ounce: 28.35, ounces: 28.35, lb: 453.6, lbs: 453.6, pound: 453.6, pounds: 453.6 };
+    function unitFamily(u) {
+      if (VOL[u]) return { fam: "vol", f: VOL[u] };
+      if (WT[u]) return { fam: "wt", f: WT[u] };
+      return { fam: u || "", f: 1 };
+    }
+    function displayQtyUnit(base, fam) {
+      if (fam === "vol") return base >= 48 ? [base / 48, "cups"] : base >= 3 ? [base / 3, "tbsp"] : [base, "tsp"];
+      if (fam === "wt") return base >= 1e3 ? [base / 1e3, "kg"] : base >= 453.6 ? [base / 453.6, "lb"] : base >= 28.35 ? [base / 28.35, "oz"] : [base, "g"];
+      return [base, fam];
+    }
     function mergeShoppingItems2(existing, additions) {
       const map = {}, order = [];
-      existing.forEach((line) => {
-        const ing = parseIngredient(line);
-        const key = ing.unit + "|" + normalizeName(ing.name).join(" ");
-        const num = ing.qty && ing.qty.indexOf("-") === -1 ? fracToNum(ing.qty) : NaN;
+      const add = (line, isAdd) => {
+        const ing = parseIngredient2(line);
+        const fu = unitFamily(ing.unit);
+        const nm = normalizeName(ing.name).join(" ");
+        const key = nm + "|" + fu.fam;
+        const num = ing.qty && ing.qty.indexOf("-") === -1 ? fracToNum(ing.qty) * fu.f : NaN;
         if (!map[key]) {
-          map[key] = { num, unit: ing.unit, name: ing.name, checked: isCompleted(line), added: false };
+          map[key] = { base: num, fam: fu.fam, name: ing.name, checked: isCompleted(line), added: isAdd };
           order.push(key);
+          return;
         }
-      });
-      additions.forEach((line) => {
-        const ing = parseIngredient(line);
-        const key = ing.unit + "|" + normalizeName(ing.name).join(" ");
-        const num = ing.qty && ing.qty.indexOf("-") === -1 ? fracToNum(ing.qty) : NaN;
-        if (map[key]) {
-          const base = map[key].checked ? 0 : map[key].num;
-          map[key].num = !isNaN(num) && !isNaN(base) ? base + num : NaN;
-          map[key].checked = false;
-          map[key].added = true;
-        } else {
-          map[key] = { num, unit: ing.unit, name: ing.name, checked: false, added: true };
-          order.push(key);
-        }
-      });
+        const m = map[key];
+        const base = isAdd && m.checked ? 0 : m.base;
+        m.base = !isNaN(num) && !isNaN(base) ? base + num : NaN;
+        if (isCompleted(line)) m.checked = true;
+        if (isAdd) m.checked = false, m.added = true;
+      };
+      existing.forEach((l) => add(l, false));
+      additions.forEach((l) => add(l, true));
       return order.map((k) => {
         const m = map[k];
         const box = m.checked && !m.added ? "- [x] " : "- [ ] ";
-        return box + [isNaN(m.num) ? "" : fmtNum(m.num), m.unit, m.name].filter(Boolean).join(" ").trim();
+        const [q, u] = isNaN(m.base) ? ["", ""] : displayQtyUnit(m.base, m.fam);
+        return box + [m.name, q === "" ? "" : fmtNum(q), u].filter(Boolean).join(" ").trim();
       });
     }
-    module2.exports = { fracToNum, fmtNum, parseIngredient, scaleQty, ingredientToTask, recipeIngredients: recipeIngredients2, mergeShoppingItems: mergeShoppingItems2 };
+    module2.exports = { fracToNum, fmtNum, parseIngredient: parseIngredient2, scaleQty, ingredientToTask, recipeIngredients: recipeIngredients2, mergeShoppingItems: mergeShoppingItems2, isStaple: isStaple2, nameKey: nameKey2 };
+  }
+});
+
+// src/pantry.js
+var require_pantry = __commonJS({
+  "src/pantry.js"(exports2, module2) {
+    "use strict";
+    var { nameKey: nameKey2, parseIngredient: parseIngredient2 } = require_recipe();
+    var PANTRY_BASENAME2 = "pantry";
+    function findPantryFile(app) {
+      return app.vault.getMarkdownFiles().filter((f) => f.basename.toLowerCase() === PANTRY_BASENAME2)[0] || null;
+    }
+    async function pantrySet2(app) {
+      const f = findPantryFile(app);
+      const set = /* @__PURE__ */ new Set();
+      if (!f) return set;
+      const text = await app.vault.cachedRead(f);
+      text.split(/\r?\n/).forEach((l) => {
+        if (/^\s*[-*+]\s+/.test(l)) {
+          const k = nameKey2(parseIngredient2(l).name);
+          if (k) set.add(k);
+        }
+      });
+      return set;
+    }
+    async function togglePantry2(app, name) {
+      const key = nameKey2(name);
+      if (!key) return null;
+      let f = findPantryFile(app);
+      if (!f) f = await app.vault.create("Family/Meal Planning/Pantry.md", "# Pantry\n\nItems here are skipped when adding recipes.\n\n");
+      const text = await app.vault.read(f);
+      const lines = text.split(/\r?\n/);
+      let idx = -1;
+      for (let i = 0; i < lines.length; i++) if (/^\s*[-*+]\s+/.test(lines[i]) && nameKey2(parseIngredient2(lines[i]).name) === key) {
+        idx = i;
+        break;
+      }
+      if (idx >= 0) {
+        lines.splice(idx, 1);
+        await app.vault.modify(f, lines.join("\n"));
+        return "removed";
+      }
+      lines.push("- " + key);
+      await app.vault.modify(f, lines.join("\n"));
+      return "added";
+    }
+    module2.exports = { PANTRY_BASENAME: PANTRY_BASENAME2, findPantryFile, pantrySet: pantrySet2, togglePantry: togglePantry2 };
+  }
+});
+
+// src/import.js
+var require_import = __commonJS({
+  "src/import.js"(exports2, module2) {
+    "use strict";
+    function parseRecipe2(html) {
+      const blocks = [];
+      const re = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+      let m;
+      while (m = re.exec(html)) blocks.push(m[1]);
+      let recipe = null;
+      for (const b of blocks) {
+        let data;
+        try {
+          data = JSON.parse(b.trim());
+        } catch (e) {
+          continue;
+        }
+        const items = Array.isArray(data) ? data : data["@graph"] || [data];
+        for (const it of items) {
+          const t = it && it["@type"];
+          if (t === "Recipe" || Array.isArray(t) && t.indexOf("Recipe") !== -1) {
+            recipe = it;
+            break;
+          }
+        }
+        if (recipe) break;
+      }
+      const clean = (x) => (x == null ? "" : String(x)).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#0?39;|&rsquo;/g, "'").replace(/&[a-z]+;/g, " ").replace(/\s+/g, " ").trim();
+      if (!recipe) return parseMicrodata(html, clean);
+      const text = (x) => (x == null ? "" : String(x)).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/\s+/g, " ").trim();
+      const ingredients = (recipe.recipeIngredient || recipe.ingredients || []).map(text).filter(Boolean);
+      const flat = [];
+      (function walk(ins) {
+        (Array.isArray(ins) ? ins : [ins]).forEach((s) => {
+          if (!s) return;
+          if (typeof s === "string") flat.push(text(s));
+          else if (s.itemListElement) walk(s.itemListElement);
+          else if (s.text) flat.push(text(s.text));
+        });
+      })(recipe.recipeInstructions || []);
+      const img = recipe.image && (recipe.image.url || (Array.isArray(recipe.image) ? recipe.image[0].url || recipe.image[0] : recipe.image));
+      const isoMin = (d) => {
+        const r = /PT(?:(\d+)H)?(?:(\d+)M)?/.exec(d || "");
+        if (!r) return "";
+        return parseInt(r[1] || 0) * 60 + parseInt(r[2] || 0) + " min";
+      };
+      return {
+        title: text(recipe.name),
+        image: typeof img === "string" ? img : "",
+        servings: text(Array.isArray(recipe.recipeYield) ? recipe.recipeYield[recipe.recipeYield.length - 1] : recipe.recipeYield) || "",
+        time: isoMin(recipe.totalTime) || "",
+        ingredients,
+        directions: flat.filter(Boolean),
+        tags: (Array.isArray(recipe.keywords) ? recipe.keywords : String(recipe.keywords || "").split(",")).map((k) => text(k).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")).filter(Boolean)
+      };
+    }
+    function sanitizeFilename2(s) {
+      return (s || "Recipe").replace(/[\\/:*?"<>|]/g, "").trim().slice(0, 80);
+    }
+    function parseMicrodata(html, clean) {
+      const collect = (re) => {
+        const out = [];
+        let m;
+        while (m = re.exec(html)) out.push(clean(m[1]));
+        return out.filter(Boolean);
+      };
+      const ingredients = collect(/<li[^>]*class="[^"]*p-ingredient[^"]*"[^>]*>([\s\S]*?)<\/li>/gi);
+      let directions = [];
+      const insBlock = /e-instructions[\s\S]*?>([\s\S]*?)<\/ol>/i.exec(html) || /recipeInstructions[\s\S]*?>([\s\S]*?)<\/(?:ol|ul)>/i.exec(html);
+      if (insBlock) {
+        let m;
+        const re = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+        while (m = re.exec(insBlock[1])) {
+          const t = clean(m[1]);
+          if (t) directions.push(t);
+        }
+      }
+      if (!ingredients.length) return null;
+      const meta = (p) => {
+        const m = new RegExp('<meta[^>]*property="' + p + '"[^>]*content="([^"]+)"', "i").exec(html) || new RegExp('content="([^"]+)"[^>]*property="' + p + '"', "i").exec(html);
+        return m ? clean(m[1]) : "";
+      };
+      const ip = (p) => {
+        const m = new RegExp('itemprop="[^"]*' + p + '[^"]*"[^>]*>([^<]+)', "i").exec(html);
+        return m ? clean(m[1]) : "";
+      };
+      return {
+        title: meta("og:title").replace(/\s*[-|]\s*The Chutney Life.*$/i, "").trim(),
+        image: meta("og:image"),
+        servings: ip("recipeYield"),
+        time: ip("totalTime") || "",
+        ingredients,
+        directions,
+        tags: []
+      };
+    }
+    function recipeToNote2(r, url) {
+      const tags = ["recipe"].concat(r.tags || []).filter((v, i, a) => a.indexOf(v) === i);
+      const fm = ["---", "type: recipe", "area: meals", "tags:", ...tags.map((t) => "  - " + t)];
+      if (r.servings) fm.push("servings: " + r.servings);
+      if (r.time) fm.push("time: " + r.time);
+      fm.push('source: "' + url + '"', 'moc: "[[Meal Planning]]"', "---");
+      const body = [];
+      if (r.image) body.push("![" + (r.title || "Recipe") + "](" + r.image + ")", "");
+      body.push("# Ingredients", "", ...r.ingredients.map((i) => "- " + i), "");
+      body.push("# Directions", "", ...r.directions.map((d, n) => n + 1 + ". " + d));
+      return fm.join("\n") + "\n" + body.join("\n") + "\n";
+    }
+    module2.exports = { parseRecipe: parseRecipe2, sanitizeFilename: sanitizeFilename2, recipeToNote: recipeToNote2 };
   }
 });
 
@@ -319,36 +502,77 @@ var require_recipe = __commonJS({
 var obsidian = require("obsidian");
 var { isTaskLine, sinkAllBlocks, sinkAtLine } = require_tasks();
 var { isManagedHeading, organizeBySections } = require_sections();
-var { recipeIngredients, mergeShoppingItems } = require_recipe();
-var SCALE_OPTIONS = [0.5, 1, 1.5, 2, 3, 4];
-var ScaleModal = class extends obsidian.Modal {
-  constructor(app, onPick) {
+var { recipeIngredients, mergeShoppingItems, nameKey, parseIngredient, isStaple } = require_recipe();
+var { pantrySet, togglePantry, PANTRY_BASENAME } = require_pantry();
+var { parseRecipe, sanitizeFilename, recipeToNote } = require_import();
+var SCALE_OPTIONS = [2, 4, 6, 8, 12];
+var PromptModal = class extends obsidian.Modal {
+  constructor(app, title, placeholder, onPick) {
     super(app);
+    this.t = title;
+    this.ph = placeholder;
     this.onPick = onPick;
   }
   onOpen() {
-    this.titleEl.setText("Scale recipe by\u2026");
-    const row = this.contentEl.createDiv({ cls: "scs-scale-row" });
-    SCALE_OPTIONS.forEach((f) => {
-      const b = row.createEl("button", { text: "x" + f });
-      b.style.margin = "4px";
-      b.onclick = () => {
-        this.close();
-        this.onPick(f);
-      };
-    });
-    const custom = this.contentEl.createEl("input", { type: "number", placeholder: "custom" });
-    custom.min = "0.1";
-    custom.step = "0.1";
-    const go = this.contentEl.createEl("button", { text: "Add" });
-    go.style.margin = "4px";
-    go.onclick = () => {
-      const v = parseFloat(custom.value);
-      if (v > 0) {
+    this.titleEl.setText(this.t);
+    const input = this.contentEl.createEl("input", { type: "text", placeholder: this.ph });
+    input.style.width = "100%";
+    const go = this.contentEl.createEl("button", { text: "Import" });
+    go.style.marginTop = "8px";
+    const submit = () => {
+      const v = input.value.trim();
+      if (v) {
         this.close();
         this.onPick(v);
       }
     };
+    go.onclick = submit;
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") submit();
+    });
+    input.focus();
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+var ScaleModal = class extends obsidian.Modal {
+  constructor(app, servings, onPick) {
+    super(app);
+    this.servings = servings || 4;
+    this.onPick = onPick;
+  }
+  onOpen() {
+    this.titleEl.setText("Add for how many people? (recipe serves " + this.servings + ")");
+    const row = this.contentEl.createDiv({ cls: "scs-scale-row" });
+    SCALE_OPTIONS.forEach((p) => {
+      const b = row.createEl("button", { text: p === 4 ? "4 (default)" : String(p) });
+      if (p === 4) b.classList.add("mod-cta");
+      b.style.margin = "4px";
+      b.onclick = () => {
+        this.close();
+        this.onPick(p / this.servings);
+      };
+    });
+    const custom = this.contentEl.createEl("input", { type: "number", placeholder: "people" });
+    custom.min = "1";
+    custom.step = "1";
+    custom.value = "4";
+    const go = this.contentEl.createEl("button", { text: "Add" });
+    go.style.margin = "4px";
+    const submit = () => {
+      const v = parseFloat(custom.value);
+      if (v > 0) {
+        this.close();
+        this.onPick(v / this.servings);
+      }
+    };
+    go.onclick = submit;
+    custom.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") submit();
+    });
+    custom.focus();
+    custom.select();
   }
   onClose() {
     this.contentEl.empty();
@@ -356,9 +580,34 @@ var ScaleModal = class extends obsidian.Modal {
 };
 var SinkCompletedTasksPlugin = class extends obsidian.Plugin {
   async onload() {
+    this.pantry = /* @__PURE__ */ new Set();
+    this.app.workspace.onLayoutReady(() => this.refreshPantry());
+    this.registerEvent(this.app.vault.on("modify", (f) => {
+      if (f.basename && f.basename.toLowerCase() === PANTRY_BASENAME) this.refreshPantry();
+    }));
     this.registerDomEvent(document, "click", this.handleCheckboxClick.bind(this));
     this.addCommand({ id: "sink-completed-tasks-current-note", name: "Sink completed tasks to bottom (current note)", editorCallback: (e) => sinkAllBlocks(e) });
-    this.addCommand({ id: "organize-shopping-list-by-section", name: "Organize shopping list by store section", editorCallback: (e) => organizeBySections(e) });
+    this.addCommand({ id: "organize-shopping-list-by-section", name: "Organize shopping list by store section", editorCallback: (e) => organizeBySections(e, this.pantry) });
+    this.addCommand({
+      id: "clear-shopping-list",
+      name: "Clear shopping list",
+      editorCallback: (e) => {
+        let first = -1, last = -1;
+        for (let i = 0, n = e.lineCount(); i < n; i++) {
+          const l = e.getLine(i);
+          if (isTaskLine(l) || isManagedHeading(l)) {
+            if (first < 0) first = i;
+            last = i;
+          }
+        }
+        if (first < 0) {
+          new obsidian.Notice("Nothing to clear.");
+          return;
+        }
+        e.replaceRange("", { line: first, ch: 0 }, { line: last, ch: e.getLine(last).length });
+        new obsidian.Notice("Shopping list cleared.");
+      }
+    });
     this.addCommand({
       id: "add-recipe-to-shopping-list",
       name: "Add this recipe to Shopping List (scaled)",
@@ -366,9 +615,38 @@ var SinkCompletedTasksPlugin = class extends obsidian.Plugin {
         const v = this.app.workspace.getActiveViewOfType(obsidian.MarkdownView);
         const ok = v && v.file && /^#\s+ingredients\b/im.test(v.editor.getValue());
         if (checking) return !!ok;
-        if (ok) new ScaleModal(this.app, (f) => this.addRecipeToList(v.editor.getValue(), f)).open();
+        const text = v.editor.getValue();
+        const sm = /servings:\s*"?(\d+(?:\.\d+)?)/i.exec(text);
+        const servings = sm ? parseFloat(sm[1]) : 4;
+        new ScaleModal(this.app, servings, (f) => this.addRecipeToList(text, f)).open();
         return true;
       }
+    });
+    this.addCommand({
+      id: "toggle-pantry-ingredient",
+      name: "Toggle pantry staple (current line)",
+      editorCallback: async (e) => {
+        const name = parseIngredient(e.getLine(e.getCursor().line)).name;
+        if (!name) {
+          new obsidian.Notice("No ingredient on this line.");
+          return;
+        }
+        const res = await togglePantry(this.app, name);
+        await this.refreshPantry();
+        new obsidian.Notice(res === "added" ? "\u{1F96B} " + name + " is now a pantry staple" : "\u{1F6D2} " + name + " removed from pantry");
+      }
+    });
+    this.registerMarkdownPostProcessor((el, ctx) => {
+      const onList = ctx && ctx.sourcePath && /shopping list\.md$/i.test(ctx.sourcePath);
+      el.querySelectorAll("li").forEach((li) => {
+        const k = nameKey(parseIngredient("- " + (li.textContent || "")).name);
+        if (k && this.pantry.has(k)) li.addClass(onList ? "scs-pantry-hide" : "scs-pantry");
+      });
+    });
+    this.addCommand({
+      id: "import-recipe-from-url",
+      name: "Import recipe from URL",
+      callback: () => new PromptModal(this.app, "Import recipe from URL", "https://\u2026/recipe", (url) => this.importRecipe(url)).open()
     });
     this.registerEvent(this.app.workspace.on("active-leaf-change", this.maybeAutoOrganize.bind(this)));
   }
@@ -376,24 +654,87 @@ var SinkCompletedTasksPlugin = class extends obsidian.Plugin {
     setTimeout(() => {
       const v = this.app.workspace.getActiveViewOfType(obsidian.MarkdownView);
       if (!v || !v.file || v.file.basename.toLowerCase() !== "shopping list") return;
-      const e = v.editor;
-      let hasTask = false;
-      for (let i = 0, n = e.lineCount(); i < n; i++) if (isTaskLine(e.getLine(i))) {
-        hasTask = true;
-        break;
-      }
-      if (hasTask) {
-        try {
-          organizeBySections(e);
-        } catch (err) {
-        }
-      }
+      this.pruneAndOrganize(v.editor);
     }, 50);
   }
+  async importRecipe(url) {
+    new obsidian.Notice("Fetching recipe\u2026");
+    let html;
+    try {
+      const res = await obsidian.requestUrl({
+        url,
+        method: "GET",
+        throw: true,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Referer": url
+        }
+      });
+      html = res.text;
+    } catch (e) {
+      new obsidian.Notice("Fetch failed: " + (e.message || e));
+      return;
+    }
+    const r = parseRecipe(html);
+    if (!r || !r.ingredients.length) {
+      new obsidian.Notice("No recipe (JSON-LD) found on that page.");
+      return;
+    }
+    const dir = "Family/Meal Planning/Recipes";
+    if (!this.app.vault.getAbstractFileByPath(dir)) {
+      try {
+        await this.app.vault.createFolder(dir);
+      } catch (e) {
+      }
+    }
+    let path = dir + "/" + sanitizeFilename(r.title) + ".md";
+    if (this.app.vault.getAbstractFileByPath(path)) path = dir + "/" + sanitizeFilename(r.title) + " " + Date.now() + ".md";
+    const file = await this.app.vault.create(path, recipeToNote(r, url));
+    await this.app.workspace.getLeaf(false).openFile(file);
+    new obsidian.Notice('Imported "' + r.title + '" (' + r.ingredients.length + " ingredients).");
+  }
+  async refreshPantry() {
+    try {
+      this.pantry = await pantrySet(this.app);
+    } catch (e) {
+      this.pantry = /* @__PURE__ */ new Set();
+    }
+    this.app.workspace.trigger("layout-change");
+    const v = this.app.workspace.getActiveViewOfType(obsidian.MarkdownView);
+    if (v && v.file && v.file.basename.toLowerCase() === "shopping list") this.pruneAndOrganize(v.editor);
+  }
+  pruneAndOrganize(e) {
+    const tasks = [];
+    for (let i = 0, n = e.lineCount(); i < n; i++) if (isTaskLine(e.getLine(i))) tasks.push(e.getLine(i));
+    if (!tasks.length) return;
+    const deduped = mergeShoppingItems(tasks, []);
+    if (deduped.length !== tasks.length) this.replaceTaskRegion(e, deduped);
+    try {
+      organizeBySections(e, this.pantry);
+    } catch (err) {
+    }
+  }
+  replaceTaskRegion(e, lines) {
+    const n = e.lineCount();
+    let first = -1, last = -1;
+    for (let i = 0; i < n; i++) {
+      const l = e.getLine(i);
+      if (isTaskLine(l) || isManagedHeading(l)) {
+        if (first < 0) first = i;
+        last = i;
+      }
+    }
+    if (first < 0) {
+      e.replaceRange((e.getValue().trim() ? "\n" : "") + lines.join("\n"), { line: n, ch: 0 });
+    } else e.replaceRange(lines.join("\n"), { line: first, ch: 0 }, { line: last, ch: e.getLine(last).length });
+  }
   async addRecipeToList(recipeText, factor) {
-    const additions = recipeIngredients(recipeText, factor);
+    await this.refreshPantry();
+    const additions = recipeIngredients(recipeText, factor, this.pantry);
     if (!additions.length) {
-      new obsidian.Notice('No ingredients found under "# Ingredients".');
+      new obsidian.Notice("No ingredients found (or all are pantry staples).");
       return;
     }
     const file = this.app.vault.getMarkdownFiles().filter((f) => f.basename.toLowerCase() === "shopping list")[0];
@@ -401,26 +742,19 @@ var SinkCompletedTasksPlugin = class extends obsidian.Plugin {
       new obsidian.Notice('No "Shopping List" note found.');
       return;
     }
-    await this.app.workspace.getLeaf(false).openFile(file);
-    const e = this.app.workspace.getActiveViewOfType(obsidian.MarkdownView).editor;
-    const n = e.lineCount();
-    const existing = [];
-    for (let i = 0; i < n; i++) if (isTaskLine(e.getLine(i))) existing.push(e.getLine(i));
-    const merged = mergeShoppingItems(existing, additions);
-    if (existing.length) {
-      let first = -1, last = -1;
-      for (let i = 0; i < n; i++) {
-        const l = e.getLine(i);
-        if (isTaskLine(l) || isManagedHeading(l)) {
-          if (first < 0) first = i;
-          last = i;
-        }
-      }
-      e.replaceRange(merged.join("\n"), { line: first, ch: 0 }, { line: last, ch: e.getLine(last).length });
-    } else {
-      e.replaceRange((e.getValue().trim() ? "\n" : "") + merged.join("\n"), { line: n, ch: 0 });
+    const leaf = this.app.workspace.getLeaf(false);
+    await leaf.openFile(file);
+    await new Promise((r) => setTimeout(r, 60));
+    const view = leaf.view instanceof obsidian.MarkdownView ? leaf.view : this.app.workspace.getActiveViewOfType(obsidian.MarkdownView);
+    if (!view || !view.editor) {
+      new obsidian.Notice("Could not open Shopping List editor.");
+      return;
     }
-    organizeBySections(e);
+    const e = view.editor;
+    const existing = [];
+    for (let i = 0, n = e.lineCount(); i < n; i++) if (isTaskLine(e.getLine(i))) existing.push(e.getLine(i));
+    this.replaceTaskRegion(e, mergeShoppingItems(existing, additions));
+    organizeBySections(e, this.pantry);
     new obsidian.Notice("Added " + additions.length + " ingredients (x" + factor + ").");
   }
   handleCheckboxClick(evt) {

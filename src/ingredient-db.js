@@ -23,7 +23,10 @@ const TOKEN_DB = {
 };
 
 // Words stripped before token lookup (descriptors/prep/units). Keep lowercase.
-const STOP = 'chopped diced minced grated finely fresh small large medium ground powder powdered seed seeds dried optional garnish garnishes ripe peeled sliced cubed whole boneless skinless raw cooked extra virgin toasted roasted can cans piece bark leaf leaves or and to taste of a the'.split(' ');
+const STOP = 'chopped diced minced grated finely fresh small large medium ground powder powdered seed seeds dried optional garnish garnishes ripe peeled sliced cubed whole boneless skinless raw cooked extra virgin toasted roasted can cans or and to taste of a the'.split(' ');
 const UNITS = 'cup cups tbsp tsp tablespoon tablespoons teaspoon teaspoons oz ounce ounces lb lbs pound pounds g kg gram grams ml l liter litre pinch clove cloves bunch handful inch'.split(' ');
 
-module.exports = { SECTIONS, PHRASE_RULES, TOKEN_DB, STOP, UNITS };
+// Default staples (used if no Pantry note exists). Your Family/Meal Planning/Pantry.md overrides this.
+const STAPLES = ['salt', 'water', 'oil', 'sugar', 'black pepper', 'pepper'];
+
+module.exports = { SECTIONS, PHRASE_RULES, TOKEN_DB, STOP, UNITS, STAPLES };

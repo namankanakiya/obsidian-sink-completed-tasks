@@ -26,7 +26,8 @@ function normalizeName(s) {
   const toks = [];
   t.split(' ').forEach((w) => {
     if (!w || STOP_SET[w] || UNIT_SET[w]) return;
-    if (w.length > 4 && w.charAt(w.length - 1) === 's') w = w.slice(0, -1);
+    if (w.length > 4 && w.slice(-3) === 'ves') w = w.slice(0, -3) + 'f';        // leaves -> leaf
+    else if (w.length > 4 && w.charAt(w.length - 1) === 's') w = w.slice(0, -1); // onions -> onion
     toks.push(w);
   });
   return toks;
@@ -50,33 +51,40 @@ function classify(line) {
   return 'Other';
 }
 
-function isManagedHeading(line) { return line.slice(0, 3) === '## ' && SECTIONS.indexOf(line.slice(3).trim()) !== -1; }
+function isManagedHeading(line) { return line.slice(0, 3) === '## ' && (SECTIONS.indexOf(line.slice(3).trim()) !== -1 || line.slice(3).trim() === PANTRY_SECTION); }
 
-function buildSections(taskLines) {
+const PANTRY_SECTION = '✓ Have (pantry)';
+
+function buildSections(taskLines, pantry) {
   const groups = {};
-  taskLines.forEach((l) => { const sec = classify(l); (groups[sec] || (groups[sec] = [])).push(l); });
+  taskLines.forEach((l) => {
+    const key = normalizeName(l.replace(/^\s*[-*+]\s*\[.\]\s*/, '').split(',')[0]).join(' ');
+    const sec = (pantry && pantry.has && pantry.has(key)) ? PANTRY_SECTION : classify(l);
+    (groups[sec] || (groups[sec] = [])).push(l);
+  });
   const out = [];
-  for (let s = 0; s < SECTIONS.length; s++) {
-    const g = groups[SECTIONS[s]]; if (!g || !g.length) continue;
+  const order = SECTIONS.concat([PANTRY_SECTION]);
+  for (let s = 0; s < order.length; s++) {
+    const g = groups[order[s]]; if (!g || !g.length) continue;
     if (out.length) out.push('');
-    out.push('## ' + SECTIONS[s]);
+    out.push('## ' + order[s]);
     reorderBlock(g).forEach((x) => out.push(x));
   }
   return out;
 }
 
 // Regroup the managed region (tasks + our headings) into sections. One editor edit.
-function organizeBySections(editor) {
+function organizeBySections(editor, pantry) {
   const n = editor.lineCount(); let first = -1, last = -1;
   for (let i = 0; i < n; i++) { const l = editor.getLine(i); if (isTaskLine(l) || isManagedHeading(l)) { if (first < 0) first = i; last = i; } }
   if (first < 0) return false;
   const tasks = [], oldText = [];
   for (let i = first; i <= last; i++) { const l = editor.getLine(i); oldText.push(l); if (isTaskLine(l)) tasks.push(l); }
   if (tasks.some(isIndented)) return false;
-  const newLines = buildSections(tasks);
+  const newLines = buildSections(tasks, pantry);
   if (arraysEqual(oldText, newLines)) return false;
   editor.replaceRange(newLines.join('\n'), { line: first, ch: 0 }, { line: last, ch: editor.getLine(last).length });
   return true;
 }
 
-module.exports = { SECTIONS, lev1, normalizeName, classify, isManagedHeading, buildSections, organizeBySections };
+module.exports = { SECTIONS, PANTRY_SECTION, lev1, normalizeName, classify, isManagedHeading, buildSections, organizeBySections };

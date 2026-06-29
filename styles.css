@@ -1,2 +1,9 @@
 .scs-scale-row { display: flex; flex-wrap: wrap; margin-bottom: 8px; }
 .scs-scale-row button { flex: 1 1 60px; }
+
+/* Pantry staples: dimmed + struck in recipes, hidden in the shopping list */
+li.scs-pantry { opacity: 0.45; text-decoration: line-through; }
+li.scs-pantry::after { content: " 🥫"; text-decoration: none; opacity: 0.8; }
+li.scs-pantry-hide { display: none; }
+/* Hide the whole sunk pantry section on the shopping list (reading view) */
+.scs-shopping h2[data-heading="✓ Have (pantry)"] { display: none; }
