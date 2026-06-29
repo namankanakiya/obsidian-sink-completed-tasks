@@ -1,7 +1,7 @@
 {
   "id": "sink-completed-tasks",
   "name": "Sink Completed Tasks",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "minAppVersion": "0.15.0",
   "description": "Automatically moves completed checklist items to the bottom of their list using granular editor edits, so checking tasks stays in sync with CRDT/live-sync plugins like Relay (no full-file rewrites, no merge conflicts).",
   "author": "nakanaki",

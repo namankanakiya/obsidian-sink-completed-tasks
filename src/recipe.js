@@ -1,6 +1,6 @@
 'use strict';
 
-const { TASK_RE, isTaskLine } = require('./tasks');
+const { TASK_RE, isTaskLine, isCompleted } = require('./tasks');
 const { normalizeName } = require('./sections');
 const { UNITS } = require('./ingredient-db');
 const UNIT_SET = {}; UNITS.forEach((w) => { UNIT_SET[w] = 1; });
@@ -45,16 +45,32 @@ function recipeIngredients(text, factor) {
 }
 
 // Merge additions into existing: same unit + same normalized name sums numeric qty.
+// A checked existing item counts as already bought (qty treated as 0): if a recipe
+// re-adds it, only the new amount remains and it returns to unchecked; if nothing is
+// added to it, it stays checked as-is.
 function mergeShoppingItems(existing, additions) {
-  const all = existing.concat(additions), map = {}, order = [];
-  all.forEach((line) => {
+  const map = {}, order = [];
+  existing.forEach((line) => {
     const ing = parseIngredient(line);
     const key = ing.unit + '|' + normalizeName(ing.name).join(' ');
     const num = (ing.qty && ing.qty.indexOf('-') === -1) ? fracToNum(ing.qty) : NaN;
-    if (map[key]) { map[key].num = (!isNaN(num) && !isNaN(map[key].num)) ? map[key].num + num : NaN; }
-    else { map[key] = { num, unit: ing.unit, name: ing.name }; order.push(key); }
+    if (!map[key]) { map[key] = { num, unit: ing.unit, name: ing.name, checked: isCompleted(line), added: false }; order.push(key); }
   });
-  return order.map((k) => ingredientToTask({ qty: isNaN(map[k].num) ? '' : fmtNum(map[k].num), unit: map[k].unit, name: map[k].name }));
+  additions.forEach((line) => {
+    const ing = parseIngredient(line);
+    const key = ing.unit + '|' + normalizeName(ing.name).join(' ');
+    const num = (ing.qty && ing.qty.indexOf('-') === -1) ? fracToNum(ing.qty) : NaN;
+    if (map[key]) {
+      const base = map[key].checked ? 0 : map[key].num; // bought already -> previous qty is nothing
+      map[key].num = (!isNaN(num) && !isNaN(base)) ? base + num : NaN;
+      map[key].checked = false; map[key].added = true;
+    } else { map[key] = { num, unit: ing.unit, name: ing.name, checked: false, added: true }; order.push(key); }
+  });
+  return order.map((k) => {
+    const m = map[k];
+    const box = (m.checked && !m.added) ? '- [x] ' : '- [ ] ';
+    return box + [isNaN(m.num) ? '' : fmtNum(m.num), m.unit, m.name].filter(Boolean).join(' ').trim();
+  });
 }
 
 module.exports = { fracToNum, fmtNum, parseIngredient, scaleQty, ingredientToTask, recipeIngredients, mergeShoppingItems };

@@ -71,9 +71,13 @@ test('recipeIngredients scales and skips subheaders/directions', () => {
   assert.deepStrictEqual(recipe.recipeIngredients(r, 2), ['- [ ] 4 tbsp butter', '- [ ] 1 cup cream']);
 });
 
-test('merge sums same unit+name', () => {
-  assert.deepStrictEqual(recipe.mergeShoppingItems(['- [ ] 2 tbsp oil'], ['- [ ] 3 tbsp oil', '- [ ] 1 onion']),
-    ['- [ ] 5 tbsp oil', '- [ ] 1 onion']);
+test('merge: unchecked sums, checked resets to recipe amount, untouched checked kept', () => {
+  // 2 tbsp oil CHECKED + recipe adds 3 tbsp oil -> old qty ignored -> 3, unchecked.
+  // 1 onion unchecked + 1 onion -> 2. checked salt with no addition stays checked. milk new.
+  assert.deepStrictEqual(
+    recipe.mergeShoppingItems(['- [x] 2 tbsp oil', '- [ ] 1 onion', '- [x] 1 tsp salt'],
+                              ['- [ ] 3 tbsp oil', '- [ ] 1 onion', '- [ ] 1 cup milk']),
+    ['- [ ] 3 tbsp oil', '- [ ] 2 onion', '- [x] 1 tsp salt', '- [ ] 1 cup milk']);
 });
 
 console.log('\nAll ' + passed + ' tests passed.');

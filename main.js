@@ -219,7 +219,7 @@ var require_sections = __commonJS({
 var require_recipe = __commonJS({
   "src/recipe.js"(exports2, module2) {
     "use strict";
-    var { TASK_RE, isTaskLine: isTaskLine2 } = require_tasks();
+    var { TASK_RE, isTaskLine: isTaskLine2, isCompleted } = require_tasks();
     var { normalizeName } = require_sections();
     var { UNITS } = require_ingredient_db();
     var UNIT_SET = {};
@@ -281,19 +281,35 @@ var require_recipe = __commonJS({
       return out;
     }
     function mergeShoppingItems2(existing, additions) {
-      const all = existing.concat(additions), map = {}, order = [];
-      all.forEach((line) => {
+      const map = {}, order = [];
+      existing.forEach((line) => {
+        const ing = parseIngredient(line);
+        const key = ing.unit + "|" + normalizeName(ing.name).join(" ");
+        const num = ing.qty && ing.qty.indexOf("-") === -1 ? fracToNum(ing.qty) : NaN;
+        if (!map[key]) {
+          map[key] = { num, unit: ing.unit, name: ing.name, checked: isCompleted(line), added: false };
+          order.push(key);
+        }
+      });
+      additions.forEach((line) => {
         const ing = parseIngredient(line);
         const key = ing.unit + "|" + normalizeName(ing.name).join(" ");
         const num = ing.qty && ing.qty.indexOf("-") === -1 ? fracToNum(ing.qty) : NaN;
         if (map[key]) {
-          map[key].num = !isNaN(num) && !isNaN(map[key].num) ? map[key].num + num : NaN;
+          const base = map[key].checked ? 0 : map[key].num;
+          map[key].num = !isNaN(num) && !isNaN(base) ? base + num : NaN;
+          map[key].checked = false;
+          map[key].added = true;
         } else {
-          map[key] = { num, unit: ing.unit, name: ing.name };
+          map[key] = { num, unit: ing.unit, name: ing.name, checked: false, added: true };
           order.push(key);
         }
       });
-      return order.map((k) => ingredientToTask({ qty: isNaN(map[k].num) ? "" : fmtNum(map[k].num), unit: map[k].unit, name: map[k].name }));
+      return order.map((k) => {
+        const m = map[k];
+        const box = m.checked && !m.added ? "- [x] " : "- [ ] ";
+        return box + [isNaN(m.num) ? "" : fmtNum(m.num), m.unit, m.name].filter(Boolean).join(" ").trim();
+      });
     }
     module2.exports = { fracToNum, fmtNum, parseIngredient, scaleQty, ingredientToTask, recipeIngredients: recipeIngredients2, mergeShoppingItems: mergeShoppingItems2 };
   }
