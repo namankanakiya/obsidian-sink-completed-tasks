@@ -123,7 +123,13 @@ test('organizeBySections is idempotent', function () {
   assert.strictEqual(I.organizeBySections(ed), false);
 });
 
-// 10. findBlock detects contiguous run boundaries
+// 9c. organize re-sorts a newly merged item into its correct section
+test('organize re-slots a newly added item', function () {
+  const ed = makeEditor('## Produce\n- [ ] onion 1\n- [ ] milk 1\n\n## Dairy\n- [ ] butter 8 tbsp');
+  I.organizeBySections(ed);
+  assert.strictEqual(ed.getText(),
+    '## Produce\n- [ ] onion 1\n\n## Dairy\n- [ ] butter 8 tbsp\n- [ ] milk 1');
+});
 test('findBlock returns contiguous run', function () {
   const lines = ['intro', '- [ ] a', '- [x] b', '- [ ] c', 'outro'];
   const blk = I.findBlock(function (i) { return lines[i]; }, lines.length, 2);

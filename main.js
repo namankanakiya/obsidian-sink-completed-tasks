@@ -233,13 +233,11 @@ class SinkCompletedTasksPlugin extends PluginBase {
       if (!view || !view.file) return;
       if (view.file.basename.toLowerCase() !== 'shopping list') return;
       const editor = view.editor;
-      let hasTask = false, hasHeading = false, n = editor.lineCount();
-      for (let i = 0; i < n; i++) {
-        const l = editor.getLine(i);
-        if (isTaskLine(l)) hasTask = true;
-        if (isManagedHeading(l)) hasHeading = true;
-      }
-      if (hasTask && !hasHeading) { try { organizeBySections(editor); } catch (e) {} }
+      let hasTask = false, n = editor.lineCount();
+      for (let i = 0; i < n; i++) { if (isTaskLine(editor.getLine(i))) { hasTask = true; break; } }
+      // organizeBySections is idempotent, so re-running on open just slots in any
+      // newly added items (e.g. after Meal Plan merges ingredients) and is a no-op otherwise.
+      if (hasTask) { try { organizeBySections(editor); } catch (e) {} }
     }, 50);
   }
 
