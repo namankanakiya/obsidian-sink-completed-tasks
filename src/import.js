@@ -66,7 +66,8 @@ function recipeToNote(r, url) {
   const fm = ['---', 'type: recipe', 'area: meals', 'tags:', ...tags.map((t) => '  - ' + t)];
   if (r.servings) fm.push('servings: ' + r.servings);
   if (r.time) fm.push('time: ' + r.time);
-  fm.push('source: "' + url + '"', 'moc: "[[Meal Planning]]"', '---');
+  if (url) fm.push('source: "' + url + '"');
+  fm.push('moc: "[[Meal Planning]]"', '---');
   const body = [];
   if (r.image) body.push('![' + (r.title || 'Recipe') + '](' + r.image + ')', '');
   body.push('# Ingredients', '', ...r.ingredients.map((i) => '- ' + i), '');

@@ -5,5 +5,6 @@
 li.scs-pantry { opacity: 0.45; text-decoration: line-through; }
 li.scs-pantry::after { content: " 🥫"; text-decoration: none; opacity: 0.8; }
 li.scs-pantry-hide { display: none; }
+textarea.scs-paste { font-family: var(--font-monospace); font-size: 0.85em; }
 /* Hide the whole sunk pantry section on the shopping list (reading view) */
 .scs-shopping h2[data-heading="✓ Have (pantry)"] { display: none; }

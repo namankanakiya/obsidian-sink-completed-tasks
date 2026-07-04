@@ -6,8 +6,24 @@ const { isManagedHeading, organizeBySections } = require('./sections');
 const { recipeIngredients, mergeShoppingItems, nameKey, parseIngredient, isStaple } = require('./recipe');
 const { pantrySet, togglePantry, PANTRY_BASENAME } = require('./pantry');
 const { parseRecipe, sanitizeFilename, recipeToNote } = require('./import');
+const { parsePastedRecipe } = require('./paste');
 
 const SCALE_OPTIONS = [2, 4, 6, 8, 12];
+
+class PasteModal extends obsidian.Modal {
+  constructor(app, onSubmit) { super(app); this.onSubmit = onSubmit; }
+  onOpen() {
+    this.titleEl.setText('Paste recipe text');
+    this.contentEl.createEl('p', { text: 'Paste the title, ingredients, then directions. Works with "Ingredients"/"Directions" headers or plain text.' });
+    const ta = this.contentEl.createEl('textarea', { cls: 'scs-paste' });
+    ta.rows = 16; ta.style.width = '100%';
+    const go = this.contentEl.createEl('button', { text: 'Create recipe', cls: 'mod-cta' });
+    go.style.marginTop = '8px';
+    go.onclick = () => { const v = ta.value.trim(); if (v) { this.close(); this.onSubmit(v); } };
+    setTimeout(() => ta.focus(), 0);
+  }
+  onClose() { this.contentEl.empty(); }
+}
 
 class PromptModal extends obsidian.Modal {
   constructor(app, title, placeholder, onPick) { super(app); this.t = title; this.ph = placeholder; this.onPick = onPick; }
@@ -101,6 +117,10 @@ class SinkCompletedTasksPlugin extends obsidian.Plugin {
       id: 'import-recipe-from-url', name: 'Import recipe from URL',
       callback: () => new PromptModal(this.app, 'Import recipe from URL', 'https://…/recipe', (url) => this.importRecipe(url)).open()
     });
+    this.addCommand({
+      id: 'create-recipe-from-text', name: 'Create recipe from pasted text',
+      callback: () => new PasteModal(this.app, (txt) => this.createRecipeFromText(txt)).open()
+    });
     this.registerEvent(this.app.workspace.on('active-leaf-change', this.maybeAutoOrganize.bind(this)));
   }
 
@@ -134,6 +154,18 @@ class SinkCompletedTasksPlugin extends obsidian.Plugin {
     const file = await this.app.vault.create(path, recipeToNote(r, url));
     await this.app.workspace.getLeaf(false).openFile(file);
     new obsidian.Notice('Imported "' + r.title + '" (' + r.ingredients.length + ' ingredients).');
+  }
+
+  async createRecipeFromText(text) {
+    const r = parsePastedRecipe(text);
+    if (!r.ingredients.length) { new obsidian.Notice('Could not find ingredients in the pasted text.'); return; }
+    const dir = 'Family/Meal Planning/Recipes';
+    if (!this.app.vault.getAbstractFileByPath(dir)) { try { await this.app.vault.createFolder(dir); } catch (e) { /* exists */ } }
+    let path = dir + '/' + sanitizeFilename(r.title) + '.md';
+    if (this.app.vault.getAbstractFileByPath(path)) path = dir + '/' + sanitizeFilename(r.title) + ' ' + Date.now() + '.md';
+    const file = await this.app.vault.create(path, recipeToNote(r, ''));
+    await this.app.workspace.getLeaf(false).openFile(file);
+    new obsidian.Notice('Created "' + r.title + '" (' + r.ingredients.length + ' ingredients, ' + r.directions.length + ' steps).');
   }
 
   async refreshPantry() {

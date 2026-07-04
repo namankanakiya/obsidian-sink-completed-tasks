@@ -121,4 +121,32 @@ test('parseIngredient handles mixed numbers (1 1/4, 10 3/4)', () => {
   assert.strictEqual(recipe.scaleQty('1.25', 2), '2.5');
 });
 
+test('parsePastedRecipe: freeform prose (Smitten Kitchen style)', () => {
+  const paste = require('../src/paste');
+  const text = [
+    'Carrot Cake with Maple Cream Cheese Frosting',
+    'Makes 24 cupcakes',
+    '2 cups all purpose flour',
+    '1/2 teaspoon ground nutmeg',
+    '4 large eggs',
+    '3 cups grated peeled carrots',
+    'Preheat oven to 350F.',
+    'Whisk flour, baking soda, salt, cinnamon, nutmeg and ginger in a medium bowl to blend.'
+  ].join('\n');
+  const r = paste.parsePastedRecipe(text);
+  assert.strictEqual(r.title, 'Carrot Cake with Maple Cream Cheese Frosting');
+  assert.strictEqual(r.servings, '24 cupcakes');
+  assert.deepStrictEqual(r.ingredients, ['2 cups all purpose flour', '1/2 teaspoon ground nutmeg', '4 large eggs', '3 cups grated peeled carrots']);
+  assert.strictEqual(r.directions.length, 2);
+});
+
+test('parsePastedRecipe: header-delimited paste', () => {
+  const paste = require('../src/paste');
+  const text = 'My Soup\nIngredients\n2 cups broth\n1 onion\nDirections\n1. Boil.\n2. Serve.';
+  const r = paste.parsePastedRecipe(text);
+  assert.strictEqual(r.title, 'My Soup');
+  assert.deepStrictEqual(r.ingredients, ['2 cups broth', '1 onion']);
+  assert.deepStrictEqual(r.directions, ['Boil.', 'Serve.']);
+});
+
 console.log('\nAll ' + passed + ' tests passed.');
