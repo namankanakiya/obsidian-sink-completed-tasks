@@ -25,7 +25,8 @@ function cleanIngredientText(s) {
 // item (qty-last: "onion 2.5 cups"). Keeps the display name raw; normalize only for keys.
 function parseIngredient(line) {
   let s = cleanIngredientText(line.replace(/^\s*[-*+]\s+\[.\]\s*/, '').replace(/^\s*[-*+]\s+/, '')).toLowerCase()
-    .replace(/½/g, '1/2').replace(/⅓/g, '1/3').replace(/⅔/g, '2/3').replace(/¼/g, '1/4').replace(/¾/g, '3/4').replace(/⅛/g, '1/8');
+    .replace(/½/g, '1/2').replace(/⅓/g, '1/3').replace(/⅔/g, '2/3').replace(/¼/g, '1/4').replace(/¾/g, '3/4').replace(/⅛/g, '1/8')
+    .replace(/(\d+)\s+(\d+)\/(\d+)/g, (m, w, a, b) => String(parseInt(w, 10) + parseInt(a, 10) / parseInt(b, 10))); // mixed number "1 1/4" -> 1.25
   const m = s.match(/(\d+(?:\.\d+)?(?:\/\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*([a-z]+)?/);
   let qty = '', unit = '';
   if (m) {

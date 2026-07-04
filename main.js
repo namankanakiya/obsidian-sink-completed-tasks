@@ -257,7 +257,7 @@ var require_recipe = __commonJS({
       return s.replace(/\([^)]*\)/g, " ").split(/,|;|&| or | plus | for /i)[0].replace(/\s+/g, " ").trim();
     }
     function parseIngredient2(line) {
-      let s = cleanIngredientText(line.replace(/^\s*[-*+]\s+\[.\]\s*/, "").replace(/^\s*[-*+]\s+/, "")).toLowerCase().replace(/½/g, "1/2").replace(/⅓/g, "1/3").replace(/⅔/g, "2/3").replace(/¼/g, "1/4").replace(/¾/g, "3/4").replace(/⅛/g, "1/8");
+      let s = cleanIngredientText(line.replace(/^\s*[-*+]\s+\[.\]\s*/, "").replace(/^\s*[-*+]\s+/, "")).toLowerCase().replace(/½/g, "1/2").replace(/⅓/g, "1/3").replace(/⅔/g, "2/3").replace(/¼/g, "1/4").replace(/¾/g, "3/4").replace(/⅛/g, "1/8").replace(/(\d+)\s+(\d+)\/(\d+)/g, (m2, w, a, b) => String(parseInt(w, 10) + parseInt(a, 10) / parseInt(b, 10)));
       const m = s.match(/(\d+(?:\.\d+)?(?:\/\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*([a-z]+)?/);
       let qty = "", unit = "";
       if (m) {

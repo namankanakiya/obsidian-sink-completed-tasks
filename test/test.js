@@ -115,4 +115,10 @@ test('parseIngredient strips parentheticals, notes, packaging words', () => {
   assert.deepStrictEqual(recipe.parseIngredient('- 1 stick unsalted butter, softened'), { qty: '1', unit: '', name: 'butter' });
 });
 
+test('parseIngredient handles mixed numbers (1 1/4, 10 3/4)', () => {
+  assert.deepStrictEqual(recipe.parseIngredient('- 1 1/4 cups canola oil'), { qty: '1.25', unit: 'cups', name: 'canola oil' });
+  assert.deepStrictEqual(recipe.parseIngredient("- 10 3/4 oz can tomato soup"), { qty: '10.75', unit: 'oz', name: 'tomato soup' });
+  assert.strictEqual(recipe.scaleQty('1.25', 2), '2.5');
+});
+
 console.log('\nAll ' + passed + ' tests passed.');
