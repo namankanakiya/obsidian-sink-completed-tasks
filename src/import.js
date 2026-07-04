@@ -61,6 +61,67 @@ function parseMicrodata(html, clean) {
   };
 }
 
+function decodeEntities(s) {
+  return (s || '')
+    .replace(/&#(\d+);/g, (m, n) => (n === '8217' || n === '8216' || n === '39' || n === '8242') ? "'" : (n === '8211' || n === '8212') ? '-' : (n === '176') ? '°' : (n === '189') ? '1/2' : ' ')
+    .replace(/&#x27;|&rsquo;|&lsquo;|&apos;/g, "'").replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+    .replace(/&deg;/g, '°').replace(/&frac12;/g, '1/2').replace(/&frac14;/g, '1/4').replace(/&frac34;/g, '3/4')
+    .replace(/&[a-z]+;/g, ' ');
+}
+
+// Turn an HTML fragment into trimmed text lines (block tags -> newlines, tags stripped).
+function htmlToLines(frag) {
+  return decodeEntities(frag
+    .replace(/<(script|style|noscript|nav|header|footer|form)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<\/(p|li|h[1-6]|div|ol|ul|br|tr|section)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, ''))
+    .split(/\n/).map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+}
+
+const QTY_RE = /^\s*([\d½⅓⅔¼¾⅛]|an?\s)/i;
+const UNIT_WORD = /\b(cups?|tbsp|tsp|tablespoons?|teaspoons?|oz|ounces?|lb|lbs|pounds?|g|kg|grams?|ml|l|liters?|litres?|pinch|cloves?|bunch|handful|inch|can|cans|package|stick|sticks|slices?|dash|large|small|medium)\b/i;
+const JUNK_RE = /comment|response|repl(y|ies)|rating|star|share this|print recipe|save recipe|read more|©|subscribe|related|newsletter|advertisement/i;
+
+function looksLikeIngredient(l) {
+  if (JUNK_RE.test(l)) return false;
+  if (/^\s*\d+\s*[.)]\s/.test(l)) return false;
+  const words = l.split(/\s+/).length;
+  if (QTY_RE.test(l) && (UNIT_WORD.test(l) || (words >= 2 && words <= 9)) && words <= 16) return true;
+  // Non-quantity ingredient lines: "Pinch of…", "Juice of…", "…for garnish", "…to taste".
+  if (words <= 10 && (/^(pinch|dash|juice|zest|splash|handful|sprinkle)\b/i.test(l) || /\bfor (garnish|serving|topping|dusting|drizzling)\b/i.test(l) || /,?\s*to taste\s*,?[^.]*$/i.test(l))) return true;
+  return false;
+}
+
+// Fallback for pages with no JSON-LD/microdata: pull the article's ingredient list
+// (a run of quantity lines) and the directions that follow it out of the body text.
+function articleToRecipe(html, title) {
+  let region = html;
+  const start = html.search(/class="[^"]*(entry-content|post-content|article-body|articleBody|recipe)[^"]*"/i);
+  if (start >= 0) {
+    const after = html.slice(start);
+    const endRel = after.search(/class="[^"]*(entry-footer|comments|post-navigation|related|sharedaddy)[^"]*"|<\/article>/i);
+    region = endRel > 0 ? after.slice(0, endRel) : after;
+  }
+  const lines = htmlToLines(region);
+  const ingIdx = [];
+  for (let i = 0; i < lines.length; i++) if (looksLikeIngredient(lines[i])) ingIdx.push(i);
+  if (ingIdx.length < 3) return null;
+  const first = ingIdx[0], last = ingIdx[ingIdx.length - 1];
+  const ingredients = [];
+  for (let i = first; i <= last; i++) if (looksLikeIngredient(lines[i])) ingredients.push(lines[i]);
+  const directions = [];
+  for (let i = first; i < lines.length && directions.length < 40; i++) {
+    const l = lines[i];
+    if (/^(related|you might|comments?|leave a|share this|filed under|posted|tags:|print|pin it|save|nutrition)\b/i.test(l)) break;
+    if (JUNK_RE.test(l) || looksLikeIngredient(l)) continue;
+    if (l.split(/\s+/).length >= 4) directions.push(l.replace(/^\s*\d+\s*[.)]\s*/, '').replace(/^step\s*\d+\s*:?\s*/i, ''));
+  }
+  let servings = '';
+  for (let i = 0; i <= first; i++) { const m = /^(?:makes|serves|yield|servings?)\b\s*:?\s*(.+)$/i.exec(lines[i]); if (m) { servings = m[1].trim(); break; } }
+  return { title: title || 'Recipe', image: '', servings: servings, time: '', ingredients: ingredients, directions: directions, tags: [] };
+}
+
 function recipeToNote(r, url) {
   const tags = ['recipe'].concat(r.tags || []).filter((v, i, a) => a.indexOf(v) === i);
   const fm = ['---', 'type: recipe', 'area: meals', 'tags:', ...tags.map((t) => '  - ' + t)];
@@ -75,4 +136,4 @@ function recipeToNote(r, url) {
   return fm.join('\n') + '\n' + body.join('\n') + '\n';
 }
 
-module.exports = { parseRecipe, sanitizeFilename, recipeToNote };
+module.exports = { parseRecipe, articleToRecipe, sanitizeFilename, recipeToNote };

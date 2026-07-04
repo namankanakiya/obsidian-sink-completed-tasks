@@ -149,4 +149,17 @@ test('parsePastedRecipe: header-delimited paste', () => {
   assert.deepStrictEqual(r.directions, ['Boil.', 'Serve.']);
 });
 
+test('articleToRecipe: extracts ingredients + directions from prose HTML', () => {
+  const imp = require('../src/import');
+  const html = '<div class="entry-content"><p>An intro paragraph about the dish that is fairly long.</p>' +
+    '<p>Serves 4</p><p>2 cups flour</p><p>1 teaspoon salt</p><p>3 large eggs</p>' +
+    '<p>Preheat the oven to 350 degrees now.</p><p>Mix everything together well and bake it.</p></div>' +
+    '<div class="comments">1 comment</div>';
+  const r = imp.articleToRecipe(html, 'Test Cake');
+  assert.strictEqual(r.title, 'Test Cake');
+  assert.strictEqual(r.servings, '4');
+  assert.deepStrictEqual(r.ingredients, ['2 cups flour', '1 teaspoon salt', '3 large eggs']);
+  assert.ok(r.directions.length >= 2);
+});
+
 console.log('\nAll ' + passed + ' tests passed.');

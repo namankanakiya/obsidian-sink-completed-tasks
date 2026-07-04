@@ -486,6 +486,55 @@ var require_import = __commonJS({
         tags: []
       };
     }
+    function decodeEntities(s) {
+      return (s || "").replace(/&#(\d+);/g, (m, n) => n === "8217" || n === "8216" || n === "39" || n === "8242" ? "'" : n === "8211" || n === "8212" ? "-" : n === "176" ? "\xB0" : n === "189" ? "1/2" : " ").replace(/&#x27;|&rsquo;|&lsquo;|&apos;/g, "'").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&deg;/g, "\xB0").replace(/&frac12;/g, "1/2").replace(/&frac14;/g, "1/4").replace(/&frac34;/g, "3/4").replace(/&[a-z]+;/g, " ");
+    }
+    function htmlToLines(frag) {
+      return decodeEntities(frag.replace(/<(script|style|noscript|nav|header|footer|form)[\s\S]*?<\/\1>/gi, " ").replace(/<\/(p|li|h[1-6]|div|ol|ul|br|tr|section)>/gi, "\n").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "")).split(/\n/).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+    }
+    var QTY_RE = /^\s*([\d½⅓⅔¼¾⅛]|an?\s)/i;
+    var UNIT_WORD = /\b(cups?|tbsp|tsp|tablespoons?|teaspoons?|oz|ounces?|lb|lbs|pounds?|g|kg|grams?|ml|l|liters?|litres?|pinch|cloves?|bunch|handful|inch|can|cans|package|stick|sticks|slices?|dash|large|small|medium)\b/i;
+    var JUNK_RE = /comment|response|repl(y|ies)|rating|star|share this|print recipe|save recipe|read more|©|subscribe|related|newsletter|advertisement/i;
+    function looksLikeIngredient(l) {
+      if (JUNK_RE.test(l)) return false;
+      if (/^\s*\d+\s*[.)]\s/.test(l)) return false;
+      const words = l.split(/\s+/).length;
+      if (QTY_RE.test(l) && (UNIT_WORD.test(l) || words >= 2 && words <= 9) && words <= 16) return true;
+      if (words <= 10 && (/^(pinch|dash|juice|zest|splash|handful|sprinkle)\b/i.test(l) || /\bfor (garnish|serving|topping|dusting|drizzling)\b/i.test(l) || /,?\s*to taste\s*,?[^.]*$/i.test(l))) return true;
+      return false;
+    }
+    function articleToRecipe2(html, title) {
+      let region = html;
+      const start = html.search(/class="[^"]*(entry-content|post-content|article-body|articleBody|recipe)[^"]*"/i);
+      if (start >= 0) {
+        const after = html.slice(start);
+        const endRel = after.search(/class="[^"]*(entry-footer|comments|post-navigation|related|sharedaddy)[^"]*"|<\/article>/i);
+        region = endRel > 0 ? after.slice(0, endRel) : after;
+      }
+      const lines = htmlToLines(region);
+      const ingIdx = [];
+      for (let i = 0; i < lines.length; i++) if (looksLikeIngredient(lines[i])) ingIdx.push(i);
+      if (ingIdx.length < 3) return null;
+      const first = ingIdx[0], last = ingIdx[ingIdx.length - 1];
+      const ingredients = [];
+      for (let i = first; i <= last; i++) if (looksLikeIngredient(lines[i])) ingredients.push(lines[i]);
+      const directions = [];
+      for (let i = first; i < lines.length && directions.length < 40; i++) {
+        const l = lines[i];
+        if (/^(related|you might|comments?|leave a|share this|filed under|posted|tags:|print|pin it|save|nutrition)\b/i.test(l)) break;
+        if (JUNK_RE.test(l) || looksLikeIngredient(l)) continue;
+        if (l.split(/\s+/).length >= 4) directions.push(l.replace(/^\s*\d+\s*[.)]\s*/, "").replace(/^step\s*\d+\s*:?\s*/i, ""));
+      }
+      let servings = "";
+      for (let i = 0; i <= first; i++) {
+        const m = /^(?:makes|serves|yield|servings?)\b\s*:?\s*(.+)$/i.exec(lines[i]);
+        if (m) {
+          servings = m[1].trim();
+          break;
+        }
+      }
+      return { title: title || "Recipe", image: "", servings, time: "", ingredients, directions, tags: [] };
+    }
     function recipeToNote2(r, url) {
       const tags = ["recipe"].concat(r.tags || []).filter((v, i, a) => a.indexOf(v) === i);
       const fm = ["---", "type: recipe", "area: meals", "tags:", ...tags.map((t) => "  - " + t)];
@@ -499,7 +548,7 @@ var require_import = __commonJS({
       body.push("# Directions", "", ...r.directions.map((d, n) => n + 1 + ". " + d));
       return fm.join("\n") + "\n" + body.join("\n") + "\n";
     }
-    module2.exports = { parseRecipe: parseRecipe2, sanitizeFilename: sanitizeFilename2, recipeToNote: recipeToNote2 };
+    module2.exports = { parseRecipe: parseRecipe2, articleToRecipe: articleToRecipe2, sanitizeFilename: sanitizeFilename2, recipeToNote: recipeToNote2 };
   }
 });
 
@@ -578,7 +627,7 @@ var { isTaskLine, sinkAllBlocks, sinkAtLine } = require_tasks();
 var { isManagedHeading, organizeBySections } = require_sections();
 var { recipeIngredients, mergeShoppingItems, nameKey, parseIngredient, isStaple } = require_recipe();
 var { pantrySet, togglePantry, PANTRY_BASENAME } = require_pantry();
-var { parseRecipe, sanitizeFilename, recipeToNote } = require_import();
+var { parseRecipe, articleToRecipe, sanitizeFilename, recipeToNote } = require_import();
 var { parsePastedRecipe } = require_paste();
 var SCALE_OPTIONS = [2, 4, 6, 8, 12];
 var PasteModal = class extends obsidian.Modal {
@@ -784,9 +833,16 @@ var SinkCompletedTasksPlugin = class extends obsidian.Plugin {
       new obsidian.Notice("Fetch failed: " + (e.message || e));
       return;
     }
-    const r = parseRecipe(html);
+    let r = parseRecipe(html);
+    let approx = false;
     if (!r || !r.ingredients.length) {
-      new obsidian.Notice("No recipe (JSON-LD) found on that page.");
+      const tm = /<title>([^<]*)/i.exec(html);
+      const title = tm ? tm[1].replace(/&#8211;.*$/, "").replace(/\s*[-|].*$/, "").trim() : "Recipe";
+      r = articleToRecipe(html, title);
+      approx = true;
+    }
+    if (!r || !r.ingredients.length) {
+      new obsidian.Notice('No recipe found on that page. Try the "Create recipe from pasted text" command.');
       return;
     }
     const dir = "Family/Meal Planning/Recipes";
@@ -800,7 +856,7 @@ var SinkCompletedTasksPlugin = class extends obsidian.Plugin {
     if (this.app.vault.getAbstractFileByPath(path)) path = dir + "/" + sanitizeFilename(r.title) + " " + Date.now() + ".md";
     const file = await this.app.vault.create(path, recipeToNote(r, url));
     await this.app.workspace.getLeaf(false).openFile(file);
-    new obsidian.Notice('Imported "' + r.title + '" (' + r.ingredients.length + " ingredients).");
+    new obsidian.Notice('Imported "' + r.title + '" (' + r.ingredients.length + " ingredients)." + (approx ? " Parsed from article text \u2014 please double-check." : ""));
   }
   async createRecipeFromText(text) {
     const r = parsePastedRecipe(text);

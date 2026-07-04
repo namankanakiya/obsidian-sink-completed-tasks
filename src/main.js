@@ -5,7 +5,7 @@ const { isTaskLine, sinkAllBlocks, sinkAtLine } = require('./tasks');
 const { isManagedHeading, organizeBySections } = require('./sections');
 const { recipeIngredients, mergeShoppingItems, nameKey, parseIngredient, isStaple } = require('./recipe');
 const { pantrySet, togglePantry, PANTRY_BASENAME } = require('./pantry');
-const { parseRecipe, sanitizeFilename, recipeToNote } = require('./import');
+const { parseRecipe, articleToRecipe, sanitizeFilename, recipeToNote } = require('./import');
 const { parsePastedRecipe } = require('./paste');
 
 const SCALE_OPTIONS = [2, 4, 6, 8, 12];
@@ -145,15 +145,22 @@ class SinkCompletedTasksPlugin extends obsidian.Plugin {
       });
       html = res.text;
     } catch (e) { new obsidian.Notice('Fetch failed: ' + (e.message || e)); return; }
-    const r = parseRecipe(html);
-    if (!r || !r.ingredients.length) { new obsidian.Notice('No recipe (JSON-LD) found on that page.'); return; }
+    let r = parseRecipe(html);
+    let approx = false;
+    if (!r || !r.ingredients.length) {
+      const tm = /<title>([^<]*)/i.exec(html);
+      const title = tm ? tm[1].replace(/&#8211;.*$/, '').replace(/\s*[-|].*$/, '').trim() : 'Recipe';
+      r = articleToRecipe(html, title);
+      approx = true;
+    }
+    if (!r || !r.ingredients.length) { new obsidian.Notice('No recipe found on that page. Try the "Create recipe from pasted text" command.'); return; }
     const dir = 'Family/Meal Planning/Recipes';
     if (!this.app.vault.getAbstractFileByPath(dir)) { try { await this.app.vault.createFolder(dir); } catch (e) { /* exists */ } }
     let path = dir + '/' + sanitizeFilename(r.title) + '.md';
     if (this.app.vault.getAbstractFileByPath(path)) path = dir + '/' + sanitizeFilename(r.title) + ' ' + Date.now() + '.md';
     const file = await this.app.vault.create(path, recipeToNote(r, url));
     await this.app.workspace.getLeaf(false).openFile(file);
-    new obsidian.Notice('Imported "' + r.title + '" (' + r.ingredients.length + ' ingredients).');
+    new obsidian.Notice('Imported "' + r.title + '" (' + r.ingredients.length + ' ingredients).' + (approx ? ' Parsed from article text — please double-check.' : ''));
   }
 
   async createRecipeFromText(text) {
