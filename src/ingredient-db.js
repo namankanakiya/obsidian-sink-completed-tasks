@@ -9,7 +9,8 @@ const PHRASE_RULES = [
   ['Frozen', ['frozen', 'ice cream', 'ice cube', 'popsicle', 'frozen peas', 'frozen corn']],
   ['Canned', ['canned', 'diced tomato', 'crushed tomato', 'tomato paste', 'tomato sauce', 'tomato puree', 'passata', 'baked bean', 'refried bean', 'pinto bean', 'kidney bean', 'black bean', 'cannellini', 'chickpea', 'chick pea', 'garbanzo', 'in adobo', 'coconut milk', 'condensed milk', 'evaporated milk', 'green chili in', 'tuna', 'olives', 'pickle', 'capers']],
   ['Bakery', ['whole wheat', 'sandwich bread', 'burger bun', 'hot dog bun', 'pita bread', 'dinner roll']],
-  ['Spices', ['bay leaf', 'bay leaves', 'taco seasoning', 'kasoori methi', 'curry powder', 'black pepper', 'red pepper flake', 'chili powder', 'chilli powder', 'star anise', 'baking powder', 'baking soda', 'vanilla extract']],
+  ['Pantry/Dry', ['apple cider vinegar', 'cider vinegar', 'rice vinegar', 'white vinegar', 'vinegar', 'olive oil', 'soy sauce', 'peanut butter', 'maple syrup']],
+  ['Spices', ['bay leaf', 'bay leaves', 'taco seasoning', 'kasoori methi', 'curry powder', 'black pepper', 'red pepper flake', 'chili powder', 'chilli powder', 'cayenne', 'star anise', 'baking powder', 'baking soda', 'vanilla extract']],
 ];
 
 // Canonical single tokens per section (looked up after normalization, plural-strip + fuzzy<=1).
@@ -23,7 +24,7 @@ const TOKEN_DB = {
 };
 
 // Words stripped before token lookup (descriptors/prep/units). Keep lowercase.
-const STOP = 'chopped diced minced grated finely fresh small large medium ground powder powdered seed seeds dried optional garnish garnishes ripe peeled sliced cubed whole boneless skinless raw cooked extra virgin toasted roasted can cans or and to taste of a the'.split(' ');
+const STOP = 'chopped diced minced grated shredded crushed mashed beaten cut cubed sliced finely fresh small large medium ground powder powdered seed seeds dried optional garnish garnishes garnishing ripe peeled halved boneless skinless raw cooked seeded cored pitted trimmed deveined extra virgin toasted roasted can cans or and to taste more plus needed room temperature softened melted packed divided thawed rinsed drained coarse coarsely freshly plain unsalted salted neutral pure style preferably such about approximately package packages bag bags stick sticks head jar box container packet block brick loaf slices slice pieces piece bark whole of a the'.split(' ');
 const UNITS = 'cup cups tbsp tsp tablespoon tablespoons teaspoon teaspoons oz ounce ounces lb lbs pound pounds g kg gram grams ml l liter litre pinch clove cloves bunch handful inch'.split(' ');
 
 // Default staples (used if no Pantry note exists). Your Family/Meal Planning/Pantry.md overrides this.

@@ -15,10 +15,16 @@ function isStaple(name, pantry) {
   return !!STAPLE_SET[k] || k.split(' ').some((t) => STAPLE_SET[t]);
 }
 
+// Remove parenthetical notes and cut off trailing alternatives/notes so the name is
+// just the core ingredient: "sriracha or more to taste" -> "sriracha".
+function cleanIngredientText(s) {
+  return s.replace(/\([^)]*\)/g, ' ').split(/,|;|&| or | plus | for /i)[0].replace(/\s+/g, ' ').trim();
+}
+
 // Parse an ingredient from a recipe (qty-first: "2.5 cups onions") OR a shopping-list
 // item (qty-last: "onion 2.5 cups"). Keeps the display name raw; normalize only for keys.
 function parseIngredient(line) {
-  let s = line.replace(/^\s*[-*+]\s+\[.\]\s*/, '').replace(/^\s*[-*+]\s+/, '').split(',')[0].trim().toLowerCase()
+  let s = cleanIngredientText(line.replace(/^\s*[-*+]\s+\[.\]\s*/, '').replace(/^\s*[-*+]\s+/, '')).toLowerCase()
     .replace(/½/g, '1/2').replace(/⅓/g, '1/3').replace(/⅔/g, '2/3').replace(/¼/g, '1/4').replace(/¾/g, '3/4').replace(/⅛/g, '1/8');
   const m = s.match(/(\d+(?:\.\d+)?(?:\/\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*([a-z]+)?/);
   let qty = '', unit = '';

@@ -73,8 +73,9 @@ class SinkCompletedTasksPlugin extends obsidian.Plugin {
         const ok = v && v.file && /^#\s+ingredients\b/im.test(v.editor.getValue());
         if (checking) return !!ok;
         const text = v.editor.getValue();
-        const sm = /servings:\s*"?(\d+(?:\.\d+)?)/i.exec(text);
-        const servings = sm ? parseFloat(sm[1]) : 4;
+        const sm = /^servings:\s*"?([^"\n]+)"?/im.exec(text);
+        let servings = 4; // default; yields with units (e.g. "2 cups", "12 slices") don't scale
+        if (sm && /^\d+(\.\d+)?\s*(servings?|serving|people|persons?)?\s*$/i.test(sm[1].trim())) servings = parseFloat(sm[1]);
         new ScaleModal(this.app, servings, (f) => this.addRecipeToList(text, f)).open();
         return true;
       }

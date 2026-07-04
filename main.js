@@ -89,7 +89,8 @@ var require_ingredient_db = __commonJS({
       ["Frozen", ["frozen", "ice cream", "ice cube", "popsicle", "frozen peas", "frozen corn"]],
       ["Canned", ["canned", "diced tomato", "crushed tomato", "tomato paste", "tomato sauce", "tomato puree", "passata", "baked bean", "refried bean", "pinto bean", "kidney bean", "black bean", "cannellini", "chickpea", "chick pea", "garbanzo", "in adobo", "coconut milk", "condensed milk", "evaporated milk", "green chili in", "tuna", "olives", "pickle", "capers"]],
       ["Bakery", ["whole wheat", "sandwich bread", "burger bun", "hot dog bun", "pita bread", "dinner roll"]],
-      ["Spices", ["bay leaf", "bay leaves", "taco seasoning", "kasoori methi", "curry powder", "black pepper", "red pepper flake", "chili powder", "chilli powder", "star anise", "baking powder", "baking soda", "vanilla extract"]]
+      ["Pantry/Dry", ["apple cider vinegar", "cider vinegar", "rice vinegar", "white vinegar", "vinegar", "olive oil", "soy sauce", "peanut butter", "maple syrup"]],
+      ["Spices", ["bay leaf", "bay leaves", "taco seasoning", "kasoori methi", "curry powder", "black pepper", "red pepper flake", "chili powder", "chilli powder", "cayenne", "star anise", "baking powder", "baking soda", "vanilla extract"]]
     ];
     var TOKEN_DB = {
       Produce: ["onion", "scallion", "shallot", "garlic", "ginger", "tomato", "potato", "sweetpotato", "carrot", "celery", "cucumber", "lettuce", "spinach", "kale", "arugula", "cabbage", "cauliflower", "broccoli", "zucchini", "eggplant", "okra", "mushroom", "pea", "greenbean", "corn", "pepper", "jalapeno", "serrano", "habanero", "poblano", "chili", "chilli", "chile", "cilantro", "parsley", "mint", "basil", "dill", "rosemary", "thyme", "sage", "curryleaf", "lemon", "lime", "orange", "apple", "banana", "mango", "grape", "berry", "strawberry", "blueberry", "raspberry", "avocado", "pineapple", "melon", "watermelon", "peach", "plum", "pear", "pomegranate", "beet", "radish", "turnip", "squash", "pumpkin", "leek", "fennel", "asparagus", "artichoke", "herb", "green", "sprout", "grapefruit"],
@@ -99,7 +100,7 @@ var require_ingredient_db = __commonJS({
       "Pantry/Dry": ["rice", "flour", "maida", "sooji", "semolina", "besan", "cornstarch", "cornflour", "lentil", "dal", "sugar", "jaggery", "honey", "syrup", "oil", "vinegar", "pasta", "noodle", "spaghetti", "macaroni", "broth", "stock", "salt", "tea", "coffee", "quinoa", "oat", "cereal", "peanut", "peanutbutter", "almond", "cashew", "walnut", "raisin", "nut", "breadcrumb", "cocoa", "chocolate", "vanilla", "cornmeal", "tamarind", "soysauce", "ketchup", "mustard", "mayo", "mayonnaise", "water"],
       Spices: ["cumin", "coriander", "turmeric", "garam", "masala", "cardamom", "peppercorn", "clove", "cinnamon", "anise", "nutmeg", "mace", "saffron", "paprika", "cayenne", "chaat", "asafoetida", "hing", "fenugreek", "methi", "oregano", "sesame", "spice", "seasoning", "allspice"]
     };
-    var STOP = "chopped diced minced grated finely fresh small large medium ground powder powdered seed seeds dried optional garnish garnishes ripe peeled sliced cubed whole boneless skinless raw cooked extra virgin toasted roasted can cans or and to taste of a the".split(" ");
+    var STOP = "chopped diced minced grated shredded crushed mashed beaten cut cubed sliced finely fresh small large medium ground powder powdered seed seeds dried optional garnish garnishes garnishing ripe peeled halved boneless skinless raw cooked seeded cored pitted trimmed deveined extra virgin toasted roasted can cans or and to taste more plus needed room temperature softened melted packed divided thawed rinsed drained coarse coarsely freshly plain unsalted salted neutral pure style preferably such about approximately package packages bag bags stick sticks head jar box container packet block brick loaf slices slice pieces piece bark whole of a the".split(" ");
     var UNITS = "cup cups tbsp tsp tablespoon tablespoons teaspoon teaspoons oz ounce ounces lb lbs pound pounds g kg gram grams ml l liter litre pinch clove cloves bunch handful inch".split(" ");
     var STAPLES = ["salt", "water", "oil", "sugar", "black pepper", "pepper"];
     module2.exports = { SECTIONS, PHRASE_RULES, TOKEN_DB, STOP, UNITS, STAPLES };
@@ -252,8 +253,11 @@ var require_recipe = __commonJS({
       if (pantry && pantry.has && pantry.has(k)) return true;
       return !!STAPLE_SET[k] || k.split(" ").some((t) => STAPLE_SET[t]);
     }
+    function cleanIngredientText(s) {
+      return s.replace(/\([^)]*\)/g, " ").split(/,|;|&| or | plus | for /i)[0].replace(/\s+/g, " ").trim();
+    }
     function parseIngredient2(line) {
-      let s = line.replace(/^\s*[-*+]\s+\[.\]\s*/, "").replace(/^\s*[-*+]\s+/, "").split(",")[0].trim().toLowerCase().replace(/½/g, "1/2").replace(/⅓/g, "1/3").replace(/⅔/g, "2/3").replace(/¼/g, "1/4").replace(/¾/g, "3/4").replace(/⅛/g, "1/8");
+      let s = cleanIngredientText(line.replace(/^\s*[-*+]\s+\[.\]\s*/, "").replace(/^\s*[-*+]\s+/, "")).toLowerCase().replace(/½/g, "1/2").replace(/⅓/g, "1/3").replace(/⅔/g, "2/3").replace(/¼/g, "1/4").replace(/¾/g, "3/4").replace(/⅛/g, "1/8");
       const m = s.match(/(\d+(?:\.\d+)?(?:\/\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*([a-z]+)?/);
       let qty = "", unit = "";
       if (m) {
@@ -616,8 +620,9 @@ var SinkCompletedTasksPlugin = class extends obsidian.Plugin {
         const ok = v && v.file && /^#\s+ingredients\b/im.test(v.editor.getValue());
         if (checking) return !!ok;
         const text = v.editor.getValue();
-        const sm = /servings:\s*"?(\d+(?:\.\d+)?)/i.exec(text);
-        const servings = sm ? parseFloat(sm[1]) : 4;
+        const sm = /^servings:\s*"?([^"\n]+)"?/im.exec(text);
+        let servings = 4;
+        if (sm && /^\d+(\.\d+)?\s*(servings?|serving|people|persons?)?\s*$/i.test(sm[1].trim())) servings = parseFloat(sm[1]);
         new ScaleModal(this.app, servings, (f) => this.addRecipeToList(text, f)).open();
         return true;
       }

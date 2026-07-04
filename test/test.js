@@ -106,4 +106,13 @@ test('parseRecipe extracts ingredients/steps/tags from JSON-LD', () => {
   assert.ok(imp.recipeToNote(r, 'http://u').includes('# Ingredients') && imp.recipeToNote(r, 'http://u').includes('time: 60 min'));
 });
 
+test('parseIngredient strips parentheticals, notes, packaging words', () => {
+  assert.deepStrictEqual(recipe.parseIngredient('- 1.5 tablespoon sriracha or more to taste'), { qty: '1.5', unit: 'tablespoon', name: 'sriracha' });
+  assert.deepStrictEqual(recipe.parseIngredient('- 8 oz package shredded mexican cheese'), { qty: '8', unit: 'oz', name: 'mexican cheese' });
+  assert.deepStrictEqual(recipe.parseIngredient('- 1 head cauliflower'), { qty: '1', unit: '', name: 'cauliflower' });
+  assert.deepStrictEqual(recipe.parseIngredient('- salt & pepper to taste'), { qty: '', unit: '', name: 'salt' });
+  assert.deepStrictEqual(recipe.parseIngredient('- 3 tablespoons flour (whole wheat, all-purpose all work)'), { qty: '3', unit: 'tablespoons', name: 'flour' });
+  assert.deepStrictEqual(recipe.parseIngredient('- 1 stick unsalted butter, softened'), { qty: '1', unit: '', name: 'butter' });
+});
+
 console.log('\nAll ' + passed + ' tests passed.');
